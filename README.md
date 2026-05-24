@@ -119,6 +119,15 @@ If you receive `:authentication_error`, verify that:
 - **5 MiB max** total message size (25 MiB for verified accounts).
 - **Transactional only**: Bulk/marketing sending is not supported.
 
+## Telemetry
+
+Telemetry works out of the box via `Swoosh.Mailer` — no extra configuration needed. The following events are emitted automatically:
+
+- `[:swoosh, :deliver, :start | :stop | :exception]`
+- `[:swoosh, :deliver_many, :start | :stop | :exception]`
+
+See the [Swoosh telemetry documentation](https://hexdocs.pm/swoosh/Swoosh.Mailer.html#module-telemetry) for details on attaching handlers.
+
 ## Resources
 
 - [Cloudflare Email Service documentation](https://developers.cloudflare.com/email-service/)
