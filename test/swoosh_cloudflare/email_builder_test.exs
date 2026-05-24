@@ -57,7 +57,7 @@ defmodule SwooshCloudflare.EmailBuilderTest do
     refute Map.has_key?(payload, "html")
   end
 
-  test "builds attachment with base64 content" do
+  test "builds attachment with base64 content and mimetype" do
     attachment = %Swoosh.Attachment{
       filename: "file.pdf",
       data: "PDF content",
@@ -71,25 +71,9 @@ defmodule SwooshCloudflare.EmailBuilderTest do
 
     assert att["filename"] == "file.pdf"
     assert att["content"] == Base.encode64("PDF content")
-    assert att["contentType"] == "application/pdf"
-    assert att["disposition"] == "attachment"
-    refute Map.has_key?(att, "contentId")
-  end
-
-  test "builds inline attachment with contentId" do
-    attachment = %Swoosh.Attachment{
-      filename: "logo.png",
-      data: "PNG data",
-      content_type: "image/png",
-      type: :inline,
-      cid: "logo@example.com"
-    }
-
-    email = %{base_email() | attachments: [attachment]}
-    [att] = EmailBuilder.build(email)["attachments"]
-
-    assert att["disposition"] == "inline"
-    assert att["contentId"] == "logo@example.com"
+    assert att["mimetype"] == "application/pdf"
+    refute Map.has_key?(att, "contentType")
+    refute Map.has_key?(att, "disposition")
   end
 
   test "reads attachment content from path when data is nil" do

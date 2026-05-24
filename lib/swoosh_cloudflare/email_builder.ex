@@ -1,6 +1,7 @@
 defmodule SwooshCloudflare.EmailBuilder do
   @moduledoc false
 
+  @spec build(Swoosh.Email.t()) :: map()
   def build(%Swoosh.Email{} = email) do
     %{}
     |> put_required(email)
@@ -38,19 +39,11 @@ defmodule SwooshCloudflare.EmailBuilder do
     Enum.map(attachments, &build_attachment/1)
   end
 
-  defp build_attachment(%Swoosh.Attachment{type: :inline, cid: cid} = att) when not is_nil(cid) do
-    att |> attachment_base() |> Map.merge(%{"disposition" => "inline", "contentId" => cid})
-  end
-
   defp build_attachment(%Swoosh.Attachment{} = att) do
-    att |> attachment_base() |> Map.put("disposition", disposition(att.type))
-  end
-
-  defp attachment_base(%Swoosh.Attachment{} = att) do
     %{
       "filename" => att.filename,
       "content" => att |> read_data() |> Base.encode64(),
-      "contentType" => att.content_type
+      "mimetype" => att.content_type
     }
   end
 
@@ -59,7 +52,4 @@ defmodule SwooshCloudflare.EmailBuilder do
 
   defp read_data(%Swoosh.Attachment{data: data}),
     do: data
-
-  defp disposition(:inline), do: "inline"
-  defp disposition(_), do: "attachment"
 end

@@ -1,6 +1,7 @@
 defmodule SwooshCloudflare.Error do
   @moduledoc false
 
+  @spec from_response(non_neg_integer(), term()) :: {non_neg_integer(), atom()}
   def from_response(status, body) when is_map(body) do
     code = get_in(body, ["errors", Access.at(0), "code"])
     {status, map_code(code)}
