@@ -12,15 +12,27 @@ E eu me vi prestes a contratar mais um serviço separado.
 
 E-mail transacional parece simples. Na prática, é onde vários projetos pagam caro sem perceber.
 
-Resend, Postmark, Mailgun, SendGrid — todos excelentes. Mas todos têm algo em comum: o plano gratuito é apertado, e o primeiro tier pago começa na faixa de **$20/mês**. Para projetos em fase inicial ou pequenos SaaS, esse custo existe antes de você enviar o primeiro e-mail de produção que gera receita.
+Resend, Postmark, Mailgun, SendGrid — todos excelentes. Mas todos compartilham o mesmo modelo de negócio: plano gratuito com **limite de ~100 e-mails por dia**, e a partir do momento que você precisa de mais, o primeiro tier pago começa na faixa de **$20/mês** — antes de você ter gerado um centavo de receita com o projeto.
 
-Quando a Cloudflare anunciou o **Email Service** — um serviço de envio de e-mail transacional via REST API integrado à conta onde seus domínios já estão — a conta foi imediata: **$5/mês pelo plano Workers**, sem custo adicional pelo envio de e-mail, usando os domínios que eu já tinha configurados lá.
+Quando a Cloudflare anunciou o **Email Service**, a conta foi imediata:
+
+| | Provedores tradicionais | Cloudflare Email Service |
+|---|---|---|
+| Plano gratuito | ~100 e-mails/dia | Somente endereços verificados |
+| Plano pago | A partir de $20/mês | **$5/mês** (Workers) |
+| Limite diário pago | Varia por plano | **1.000 e-mails/dia** |
+| Cap mensal | Depende do plano | Não publicado |
+| Domínio próprio | Configuração separada | Já está na Cloudflare |
+
+1.000 e-mails/dia cobre com folga a maioria dos SaaS em fase inicial e muitos em crescimento — e o plano já existe para quem usa Workers por qualquer outro motivo.
+
+Não é só sobre preço. É sobre **não precisar de mais um cartão de crédito, mais um contrato, mais um painel**.
 
 ---
 
 ## O sinal que confirmou que era hora de apostar
 
-O Cloudflare Email Service ainda está tecnicamente em beta. Mas um detalhe me chamou atenção: o **Laravel** — um dos frameworks PHP mais usados no mundo, com milhões de instalações — começou a adicionar suporte nativo ao serviço.
+O Cloudflare Email Service ainda está tecnicamente em beta. Mas um detalhe me chamou atenção: o **Laravel** — um dos frameworks PHP mais usados no mundo, com dezenas de milhões de instalações — começou a adicionar suporte nativo ao serviço.
 
 Frameworks mainstream não integram APIs instáveis. Esse foi o sinal que precisava.
 
@@ -28,9 +40,9 @@ Frameworks mainstream não integram APIs instáveis. Esse foi o sinal que precis
 
 ## O gap no ecossistema Elixir
 
-Meus projetos são construídos em **Elixir com Phoenix**. O envio de e-mail no ecossistema Elixir passa pelo **Swoosh** — uma biblioteca elegante que padroniza a interface de envio e suporta dezenas de provedores via adapters intercambiáveis.
+Meus projetos são construídos em **Elixir com Phoenix**. O envio de e-mail no ecossistema Elixir passa pelo **Swoosh** — uma biblioteca elegante que padroniza a interface de envio e suporta dezenas de provedores via adapters intercambiáveis: Resend, Postmark, Mailgun, Sendgrid e outros.
 
-Pesquisei no Hex.pm (o repositório de pacotes do Elixir): nenhum adapter Swoosh para Cloudflare Email existia.
+Pesquisei no Hex.pm (o repositório de pacotes Elixir): nenhum adapter Swoosh para Cloudflare Email existia.
 
 Então criei.
 
@@ -38,9 +50,9 @@ Então criei.
 
 ## swoosh_cloudflare
 
-Em algumas horas de trabalho, publiquei o `swoosh_cloudflare` — um adapter Swoosh que conecta qualquer aplicação Phoenix ao Cloudflare Email Service via REST API.
+Publiquei o `swoosh_cloudflare` — um adapter Swoosh que conecta qualquer aplicação Phoenix ao Cloudflare Email Service via REST API.
 
-A configuração é essa:
+A configuração:
 
 ```elixir
 config :my_app, MyApp.Mailer,
@@ -49,7 +61,7 @@ config :my_app, MyApp.Mailer,
   account_id: System.get_env("CLOUDFLARE_ACCOUNT_ID")
 ```
 
-E o envio segue o padrão Swoosh que qualquer developer Elixir já conhece:
+O envio segue o padrão Swoosh que qualquer developer Elixir já conhece:
 
 ```elixir
 new()
@@ -60,13 +72,13 @@ new()
 |> MyApp.Mailer.deliver()
 ```
 
-Suporta anexos, cc/bcc, reply-to, tratamento estruturado de erros com os códigos da API Cloudflare, timeout configurado e envio paralelo de múltiplos e-mails via `deliver_many/2`.
+Suporta anexos, cc/bcc, reply-to, tratamento estruturado de erros com os códigos da API Cloudflare, timeout configurado e envio paralelo via `deliver_many/2`.
 
 ---
 
 ## O que aprendi com isso
 
-Infraestrutura fragmentada tem um custo real — não só financeiro, mas cognitivo. Cada serviço separado é mais um painel, mais um cartão de crédito, mais uma chave de API para rotacionar, mais um contrato para cancelar se o projeto não decolar.
+Infraestrutura fragmentada tem um custo real — não só financeiro, mas cognitivo. Cada serviço separado é mais um painel, mais uma chave de API para rotacionar, mais um contrato para cancelar se o projeto não decolar.
 
 Consolidar dentro da Cloudflare não é só sobre economizar $15/mês. É sobre reduzir a superfície de complexidade operacional enquanto o projeto ainda está crescendo.
 
@@ -76,7 +88,7 @@ E quando você resolve um problema assim e percebe que mais ninguém no seu ecos
 
 📦 Pacote no Hex.pm: [swoosh_cloudflare](https://hex.pm/packages/swoosh_cloudflare)
 🔗 Código no GitHub: [devaction-labs/swoosh_cloudflare](https://github.com/devaction-labs/swoosh_cloudflare)
-📄 Documentação Cloudflare Email Service: [developers.cloudflare.com/email-service](https://developers.cloudflare.com/email-service/)
+📄 Cloudflare Email Service: [developers.cloudflare.com/email-service](https://developers.cloudflare.com/email-service/)
 
 Se você usa Elixir + Phoenix e já tem domínios na Cloudflare, vale conferir.
 
