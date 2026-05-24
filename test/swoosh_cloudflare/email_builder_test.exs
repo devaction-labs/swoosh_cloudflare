@@ -91,4 +91,25 @@ defmodule SwooshCloudflare.EmailBuilderTest do
     assert att["disposition"] == "inline"
     assert att["contentId"] == "logo@example.com"
   end
+
+  test "reads attachment content from path when data is nil" do
+    path = Path.join(System.tmp_dir!(), "swoosh_cf_test_#{System.unique_integer()}.txt")
+    File.write!(path, "file content from disk")
+
+    on_exit(fn -> File.rm(path) end)
+
+    attachment = %Swoosh.Attachment{
+      filename: "doc.txt",
+      data: nil,
+      path: path,
+      content_type: "text/plain",
+      type: :attachment,
+      cid: nil
+    }
+
+    email = %{base_email() | attachments: [attachment]}
+    [att] = EmailBuilder.build(email)["attachments"]
+
+    assert att["content"] == Base.encode64("file content from disk")
+  end
 end

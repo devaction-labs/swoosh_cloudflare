@@ -49,10 +49,16 @@ defmodule SwooshCloudflare.EmailBuilder do
   defp attachment_base(%Swoosh.Attachment{} = att) do
     %{
       "filename" => att.filename,
-      "content" => Base.encode64(att.data),
+      "content" => att |> read_data() |> Base.encode64(),
       "contentType" => att.content_type
     }
   end
+
+  defp read_data(%Swoosh.Attachment{data: nil, path: path}) when not is_nil(path),
+    do: File.read!(path)
+
+  defp read_data(%Swoosh.Attachment{data: data}),
+    do: data
 
   defp disposition(:inline), do: "inline"
   defp disposition(_), do: "attachment"
