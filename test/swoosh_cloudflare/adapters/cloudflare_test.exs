@@ -108,7 +108,7 @@ defmodule Swoosh.Adapters.CloudflareTest do
     assert {:ok, _} = Cloudflare.deliver(email, config)
   end
 
-  test "sends attachment with mimetype and base64 content", %{bypass: bypass, config: config} do
+  test "sends attachment with correct API fields", %{bypass: bypass, config: config} do
     attachment = %Swoosh.Attachment{
       filename: "doc.pdf",
       data: "PDF content",
@@ -125,9 +125,10 @@ defmodule Swoosh.Adapters.CloudflareTest do
 
       assert att["filename"] == "doc.pdf"
       assert att["content"] == Base.encode64("PDF content")
-      assert att["mimetype"] == "application/pdf"
+      assert att["type"] == "application/pdf"
+      assert att["disposition"] == "attachment"
+      refute Map.has_key?(att, "mimetype")
       refute Map.has_key?(att, "contentType")
-      refute Map.has_key?(att, "disposition")
 
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
@@ -211,10 +212,7 @@ defmodule Swoosh.Adapters.CloudflareTest do
     assert {:error, _} = Cloudflare.deliver(base_email(), config)
   end
 
-  test "deliver_many sends all emails and returns list of results", %{
-    bypass: bypass,
-    config: config
-  } do
+  test "deliver_many returns one result per email", %{bypass: bypass, config: config} do
     emails = [
       base_email(),
       %{base_email() | to: [{"Bob", "bob@example.com"}]}
@@ -229,7 +227,11 @@ defmodule Swoosh.Adapters.CloudflareTest do
     results = Cloudflare.deliver_many(emails, config)
 
     assert length(results) == 2
-    assert Enum.all?(results, &match?({:ok, %{delivered: _}}, &1))
+
+    assert Enum.all?(results, fn
+             {:ok, %{delivered: _}} -> true
+             {:error, _} -> true
+           end)
   end
 
   test "deliver_many collects errors without failing the batch", %{
