@@ -174,20 +174,73 @@ defmodule Swoosh.Adapters.CloudflareTest do
     assert {:error, {429, :rate_limited, nil}} = Cloudflare.deliver(base_email(), config)
   end
 
-  test "returns message_too_large error on 400 code 10202", %{bypass: bypass, config: config} do
+  defp respond(bypass, status, body, type \\ "application/json") do
     expect_post(bypass, fn conn ->
       conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.send_resp(
-        400,
-        Jason.encode!(%{
-          "success" => false,
-          "errors" => [%{"code" => 10202, "message" => "Message too large"}]
-        })
-      )
+      |> Plug.Conn.put_resp_content_type(type)
+      |> Plug.Conn.send_resp(status, body)
     end)
+  end
 
-    assert {:error, {400, :message_too_large}} = Cloudflare.deliver(base_email(), config)
+  defp error_body(code, message),
+    do:
+      Jason.encode!(%{"success" => false, "errors" => [%{"code" => code, "message" => message}]})
+
+  test "returns invalid_email with the body on 400 code 10202", %{bypass: bypass, config: config} do
+    respond(bypass, 400, error_body(10202, "email.sending.error.email.invalid"))
+
+    assert {:error,
+            {400, :invalid_email,
+             %{"errors" => [%{"message" => "email.sending.error.email.invalid"}]}}} =
+             Cloudflare.deliver(base_email(), config)
+  end
+
+  test "returns message_too_large on 400 code 10200", %{bypass: bypass, config: config} do
+    respond(bypass, 400, error_body(10200, "email.sending.error.email.too_big"))
+    assert {:error, {400, :message_too_large, _}} = Cloudflare.deliver(base_email(), config)
+  end
+
+  test "returns authentication_error on 401 code 10101", %{bypass: bypass, config: config} do
+    respond(bypass, 401, error_body(10101, "email.sending.error.authentication.unauthorized"))
+    assert {:error, {401, :authentication_error, _}} = Cloudflare.deliver(base_email(), config)
+  end
+
+  test "returns not_found on 404 code 10000", %{bypass: bypass, config: config} do
+    respond(bypass, 404, error_body(10000, "email.sending.error.not_found"))
+    assert {:error, {404, :not_found, _}} = Cloudflare.deliver(base_email(), config)
+  end
+
+  test "returns unknown_error without raising when the JSON has no errors list", %{
+    bypass: bypass,
+    config: config
+  } do
+    respond(bypass, 400, Jason.encode!(%{"success" => false, "errors" => "nope"}))
+
+    assert {:error, {400, :unknown_error, %{"errors" => "nope"}}} =
+             Cloudflare.deliver(base_email(), config)
+  end
+
+  test "returns unknown_error with the text of a non-JSON error", %{
+    bypass: bypass,
+    config: config
+  } do
+    respond(bypass, 502, "<html>Bad gateway</html>", "text/html")
+
+    assert {:error, {502, :unknown_error, "<html>Bad gateway</html>"}} =
+             Cloudflare.deliver(base_email(), config)
+  end
+
+  test "returns invalid_response, not a raise, for a 200 that is not JSON", %{
+    bypass: bypass,
+    config: config
+  } do
+    respond(bypass, 200, "ok", "text/plain")
+    assert {:error, {200, :invalid_response, "ok"}} = Cloudflare.deliver(base_email(), config)
+  end
+
+  test "accepts any 2xx as success", %{bypass: bypass, config: config} do
+    respond(bypass, 202, success_body())
+    assert {:ok, %{delivered: ["alice@example.com"]}} = Cloudflare.deliver(base_email(), config)
   end
 
   test "returns server_error on 500", %{bypass: bypass, config: config} do
@@ -203,7 +256,7 @@ defmodule Swoosh.Adapters.CloudflareTest do
       )
     end)
 
-    assert {:error, {500, :server_error}} = Cloudflare.deliver(base_email(), config)
+    assert {:error, {500, :server_error, _}} = Cloudflare.deliver(base_email(), config)
   end
 
   test "returns error tuple on network failure", %{bypass: bypass, config: config} do
@@ -255,6 +308,6 @@ defmodule Swoosh.Adapters.CloudflareTest do
     results = Cloudflare.deliver_many(emails, config)
 
     assert length(results) == 2
-    assert Enum.all?(results, &match?({:error, {500, :server_error}}, &1))
+    assert Enum.all?(results, &match?({:error, {500, :server_error, _}}, &1))
   end
 end
