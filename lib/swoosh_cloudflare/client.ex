@@ -11,8 +11,8 @@ defmodule SwooshCloudflare.Client do
     url = "#{base}/accounts/#{config[:account_id]}/email/sending/send"
 
     case Req.post(url, json: payload, headers: headers(config), receive_timeout: 15_000) do
-      {:ok, %{status: 200, body: body}} ->
-        result = body["result"] || %{}
+      {:ok, %{status: status, body: %{} = body}} when status in 200..299 ->
+        result = if is_map(body["result"]), do: body["result"], else: %{}
 
         {:ok,
          %{
@@ -21,14 +21,17 @@ defmodule SwooshCloudflare.Client do
            queued: result["queued"] || []
          }}
 
-      {:ok, %{status: 429, body: body, headers: resp_headers}} ->
+      # A 2xx that is not JSON: the mail may or may not have gone, so it is an error, not a raise.
+      {:ok, %{status: status, body: body}} when status in 200..299 ->
+        {:error, {status, :invalid_response, body}}
+
+      {:ok, %{status: 429, headers: resp_headers}} ->
         retry_after =
           resp_headers
           |> Map.get("retry-after", [])
           |> List.first()
           |> parse_retry_after()
 
-        _ = Error.from_response(429, body)
         {:error, {429, :rate_limited, retry_after}}
 
       {:ok, %{status: status, body: body}} ->
