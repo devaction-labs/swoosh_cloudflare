@@ -93,6 +93,44 @@ defmodule SwooshCloudflare.EmailBuilderTest do
     assert att["type"] == "image/png"
   end
 
+  test "sends content_id for inline attachments with a cid" do
+    attachment = %Swoosh.Attachment{
+      filename: "logo.png",
+      data: "PNG data",
+      content_type: "image/png",
+      type: :inline,
+      cid: "logo"
+    }
+
+    email = %{base_email() | attachments: [attachment]}
+    [att] = EmailBuilder.build(email)["attachments"]
+
+    assert att["content_id"] == "logo"
+  end
+
+  test "omits content_id for regular attachments and empty cids" do
+    regular = %Swoosh.Attachment{
+      filename: "a.pdf",
+      data: "x",
+      content_type: "application/pdf",
+      type: :attachment,
+      cid: "ignored"
+    }
+
+    inline_empty = %Swoosh.Attachment{
+      filename: "b.png",
+      data: "x",
+      content_type: "image/png",
+      type: :inline,
+      cid: ""
+    }
+
+    email = %{base_email() | attachments: [regular, inline_empty]}
+    atts = EmailBuilder.build(email)["attachments"]
+
+    refute Enum.any?(atts, &Map.has_key?(&1, "content_id"))
+  end
+
   test "reads attachment content from path when data is nil" do
     path = Path.join(System.tmp_dir!(), "swoosh_cf_test_#{System.unique_integer()}.txt")
     File.write!(path, "file content from disk")

@@ -46,7 +46,14 @@ defmodule SwooshCloudflare.EmailBuilder do
       "type" => att.content_type,
       "disposition" => disposition(att.type)
     }
+    |> put_content_id(att)
   end
+
+  defp put_content_id(map, %Swoosh.Attachment{type: :inline, cid: cid})
+       when is_binary(cid) and cid != "",
+       do: Map.put(map, "content_id", cid)
+
+  defp put_content_id(map, _att), do: map
 
   defp disposition(:inline), do: "inline"
   defp disposition(_), do: "attachment"
