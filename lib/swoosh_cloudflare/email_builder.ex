@@ -29,7 +29,10 @@ defmodule SwooshCloudflare.EmailBuilder do
   end
 
   defp format_address(nil), do: nil
-  defp format_address({name, email}) when name not in [nil, ""], do: "#{name} <#{email}>"
+
+  defp format_address({name, email}) when name not in [nil, ""],
+    do: %{"address" => email, "name" => name}
+
   defp format_address({_name, email}), do: email
   defp format_address(email) when is_binary(email), do: email
 

@@ -59,8 +59,8 @@ defmodule Swoosh.Adapters.CloudflareTest do
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       payload = Jason.decode!(body)
 
-      assert payload["to"] == ["Alice <alice@example.com>"]
-      assert payload["from"] == "Sender <sender@example.com>"
+      assert payload["to"] == [%{"address" => "alice@example.com", "name" => "Alice"}]
+      assert payload["from"] == %{"address" => "sender@example.com", "name" => "Sender"}
       assert payload["subject"] == "Test Subject"
       assert payload["html"] == "<p>Hello</p>"
 
@@ -96,9 +96,9 @@ defmodule Swoosh.Adapters.CloudflareTest do
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       payload = Jason.decode!(body)
 
-      assert payload["cc"] == ["Bob <bob@example.com>"]
+      assert payload["cc"] == [%{"address" => "bob@example.com", "name" => "Bob"}]
       assert payload["bcc"] == ["bcc@example.com"]
-      assert payload["reply_to"] == "Reply <reply@example.com>"
+      assert payload["reply_to"] == %{"address" => "reply@example.com", "name" => "Reply"}
 
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
