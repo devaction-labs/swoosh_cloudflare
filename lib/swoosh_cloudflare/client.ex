@@ -16,9 +16,11 @@ defmodule SwooshCloudflare.Client do
 
         {:ok,
          %{
+           id: result["message_id"],
            delivered: result["delivered"] || [],
            permanent_bounces: result["permanent_bounces"] || [],
-           queued: result["queued"] || []
+           queued: result["queued"] || [],
+           suppressed_recipients: result["suppressed_recipients"] || []
          }}
 
       # A 2xx that is not JSON: the mail may or may not have gone, so it is an error, not a raise.

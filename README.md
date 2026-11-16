@@ -9,7 +9,7 @@
 ```elixir
 def deps do
   [
-    {:swoosh_cloudflare, "~> 0.3"}
+    {:swoosh_cloudflare, "~> 0.4"}
   ]
 end
 ```
@@ -75,14 +75,34 @@ new()
 
 ### Success response
 
-`deliver/2` returns a map with three fields:
+`deliver/2` returns a map:
 
 ```elixir
 {:ok, %{
+  id: "message-id",
   delivered: ["alice@example.com"],
   permanent_bounces: [],
-  queued: []
+  queued: [],
+  suppressed_recipients: []
 }}
+```
+
+- `id` is the Cloudflare message ID, which you can trace in the Email Service activity log.
+- `suppressed_recipients` lists recipients dropped because they are on the suppression list (only when "Drop suppressed recipients" is enabled on the sending domain).
+
+## Inline images
+
+Use `type: :inline` with a `cid`, and reference it from the HTML body:
+
+```elixir
+import Swoosh.Email
+
+new()
+|> to("alice@example.com")
+|> from("noreply@yourdomain.com")
+|> subject("Welcome!")
+|> html_body(~s(<img src="cid:logo">))
+|> attachment(Swoosh.Attachment.new("logo.png", type: :inline, cid: "logo"))
 ```
 
 ## Error handling
@@ -120,10 +140,12 @@ If you receive `:authentication_error`, verify that:
 
 ## Limitations
 
-- **Verified addresses only**: New accounts can only send to addresses verified in your Cloudflare dashboard. Paid plans unlock general sending.
-- **Domain requirement**: The `from` address must belong to a domain with [Email Routing](https://developers.cloudflare.com/email-routing/) active in your Cloudflare account.
+- **25 MiB max** total message size, including attachments.
 - **50 recipients max** per email (combined to/cc/bcc).
-- **5 MiB max** total message size (25 MiB for verified accounts).
+- **Subject**: 998 characters max.
+- **Custom headers**: 16 KB max combined.
+- **Recipients**: before onboarding a sending domain you can only send to verified destination addresses; after onboarding a sending domain you can send to any recipient.
+- **Domain requirement**: the `from` address must be on an onboarded sending domain.
 - **Transactional only**: Bulk/marketing sending is not supported.
 
 ## Telemetry

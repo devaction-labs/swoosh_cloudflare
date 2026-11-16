@@ -29,7 +29,10 @@ defmodule SwooshCloudflare.EmailBuilder do
   end
 
   defp format_address(nil), do: nil
-  defp format_address({name, email}) when name not in [nil, ""], do: "#{name} <#{email}>"
+
+  defp format_address({name, email}) when name not in [nil, ""],
+    do: %{"address" => email, "name" => name}
+
   defp format_address({_name, email}), do: email
   defp format_address(email) when is_binary(email), do: email
 
@@ -46,7 +49,14 @@ defmodule SwooshCloudflare.EmailBuilder do
       "type" => att.content_type,
       "disposition" => disposition(att.type)
     }
+    |> put_content_id(att)
   end
+
+  defp put_content_id(map, %Swoosh.Attachment{type: :inline, cid: cid})
+       when is_binary(cid) and cid != "",
+       do: Map.put(map, "content_id", cid)
+
+  defp put_content_id(map, _att), do: map
 
   defp disposition(:inline), do: "inline"
   defp disposition(_), do: "attachment"

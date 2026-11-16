@@ -54,13 +54,50 @@ defmodule Swoosh.Adapters.CloudflareTest do
              Cloudflare.deliver(base_email(), config)
   end
 
+  test "returns message id and suppressed recipients when present", %{
+    bypass: bypass,
+    config: config
+  } do
+    respond(
+      bypass,
+      200,
+      Jason.encode!(%{
+        "success" => true,
+        "result" => %{
+          "delivered" => ["alice@example.com"],
+          "permanent_bounces" => [],
+          "queued" => [],
+          "message_id" => "msg-123",
+          "suppressed_recipients" => ["bob@example.com"]
+        }
+      })
+    )
+
+    assert {:ok,
+            %{
+              id: "msg-123",
+              delivered: ["alice@example.com"],
+              suppressed_recipients: ["bob@example.com"]
+            }} = Cloudflare.deliver(base_email(), config)
+  end
+
+  test "returns nil id and empty suppressed recipients when absent", %{
+    bypass: bypass,
+    config: config
+  } do
+    respond(bypass, 200, success_body())
+
+    assert {:ok, %{id: nil, suppressed_recipients: []}} =
+             Cloudflare.deliver(base_email(), config)
+  end
+
   test "sends correct payload fields", %{bypass: bypass, config: config} do
     expect_post(bypass, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       payload = Jason.decode!(body)
 
-      assert payload["to"] == ["Alice <alice@example.com>"]
-      assert payload["from"] == "Sender <sender@example.com>"
+      assert payload["to"] == [%{"address" => "alice@example.com", "name" => "Alice"}]
+      assert payload["from"] == %{"address" => "sender@example.com", "name" => "Sender"}
       assert payload["subject"] == "Test Subject"
       assert payload["html"] == "<p>Hello</p>"
 
@@ -96,9 +133,9 @@ defmodule Swoosh.Adapters.CloudflareTest do
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       payload = Jason.decode!(body)
 
-      assert payload["cc"] == ["Bob <bob@example.com>"]
+      assert payload["cc"] == [%{"address" => "bob@example.com", "name" => "Bob"}]
       assert payload["bcc"] == ["bcc@example.com"]
-      assert payload["reply_to"] == "Reply <reply@example.com>"
+      assert payload["reply_to"] == %{"address" => "reply@example.com", "name" => "Reply"}
 
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
