@@ -15,9 +15,12 @@ defmodule Swoosh.Adapters.Cloudflare do
 
   ## Error responses
 
-  `deliver/2` returns `{:error, {status, reason}}` for most errors, and
+  `deliver/2` returns `{:error, {status, reason, body}}` for most errors, with
+  Cloudflare's response body so its message is not lost, and
   `{:error, {429, :rate_limited, retry_after_seconds}}` for rate limiting,
   where `retry_after_seconds` is an integer or `nil` if the header was absent.
+  Any 2xx with a JSON body is success; a 2xx without one is
+  `{:error, {status, :invalid_response, body}}`.
 
   ## Limitations
 
