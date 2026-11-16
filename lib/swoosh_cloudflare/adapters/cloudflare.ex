@@ -11,7 +11,17 @@ defmodule Swoosh.Adapters.Cloudflare do
 
   ## Success response
 
-  `deliver/2` returns `{:ok, %{delivered: [...], permanent_bounces: [...], queued: [...]}}`.
+  `deliver/2` returns `{:ok, %{id: ..., delivered: [...], permanent_bounces: [...], queued: [...], suppressed_recipients: [...]}}`.
+
+  - `id` is the Cloudflare message ID, which you can trace in the Email Service activity log.
+  - `suppressed_recipients` lists recipients dropped because they are on the suppression list
+    (only when "Drop suppressed recipients" is enabled on the sending domain). It is `[]` otherwise.
+
+  ## Inline images
+
+  Use `type: :inline` with a `cid`, e.g.
+  `Swoosh.Attachment.new("logo.png", type: :inline, cid: "logo")`, and reference it
+  in the HTML body with `<img src="cid:logo">`.
 
   ## Error responses
 
@@ -24,11 +34,13 @@ defmodule Swoosh.Adapters.Cloudflare do
 
   ## Limitations
 
-  - New accounts can only send to verified addresses. Paid plans unlock general sending.
-  - The `from` address must belong to a domain with Email Routing active in the Cloudflare account.
+  - Maximum total message size is 25 MiB, including attachments.
   - Maximum 50 recipients per email (combined to/cc/bcc).
-  - Maximum message size: 5 MiB (25 MiB for verified accounts).
-  - Transactional email only — bulk/marketing sending is not supported.
+  - Subject: maximum 998 characters.
+  - Custom headers: maximum 16 KB combined.
+  - Before onboarding a sending domain, you can only send to verified destination addresses. After onboarding a sending domain, you can send to any recipient.
+  - The `from` address must be on an onboarded sending domain.
+  - Transactional email only. Bulk/marketing sending is not supported.
   """
 
   use Swoosh.Adapter, required_config: [:api_token, :account_id]
