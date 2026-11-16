@@ -9,7 +9,7 @@
 ```elixir
 def deps do
   [
-    {:swoosh_cloudflare, "~> 0.2"}
+    {:swoosh_cloudflare, "~> 0.3"}
   ]
 end
 ```
@@ -87,24 +87,31 @@ new()
 
 ## Error handling
 
-`deliver/2` returns `{:error, {http_status, reason}}` on most errors.
+`deliver/2` returns `{:error, {http_status, reason, body}}` on most errors, where `body` is Cloudflare's response body (decoded JSON, or the raw text for non-JSON responses) so the original message is never lost.
 
-For **429 rate limiting**, a third element carries the `Retry-After` value in seconds (or `nil` if the header was absent):
+For **429 rate limiting**, the third element is the `Retry-After` value in seconds (or `nil` if the header was absent):
 
 ```elixir
 {:error, {429, :rate_limited, 60}}
 ```
 
-Full error table:
+Any 2xx with a JSON body is a success. A 2xx without one returns `{:error, {status, :invalid_response, body}}`.
+
+Full error table ([Cloudflare docs](https://developers.cloudflare.com/email-service/api/send-emails/rest-api/#error-responses)):
 
 | Reason | HTTP | Cloudflare code |
 |---|---|---|
-| `:authentication_error` | 401 | 10000 |
 | `:invalid_request` | 400 | 10001 |
-| `:message_too_large` | 400/413 | 10202 |
+| `:message_too_large` | 400 | 10200 |
+| `:no_content_length` | 400 | 10201 |
+| `:invalid_email` | 400 | 10202 |
+| `:authentication_error` | 401 | 10101, 10103 |
+| `:forbidden` | 403 | 10102, 10105 |
 | `:sending_disabled` | 403 | 10203 |
+| `:account_suspended` | 403 | 10207 |
+| `:not_found` | 404 | 10000 |
 | `:rate_limited` | 429 | 10004 |
-| `:server_error` | 500 | 10002 |
+| `:server_error` | 500/503 | 10002, 10003, 10100 |
 | `:unknown_error` | any | — |
 
 If you receive `:authentication_error`, verify that:
