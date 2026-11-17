@@ -230,4 +230,23 @@ defmodule SwooshCloudflare.EmailBuilderTest do
       EmailBuilder.build(%{base_email() | attachments: [att]})
     end
   end
+
+  describe "provider_options" do
+    test "are merged into the payload with string keys" do
+      email = Swoosh.Email.put_provider_option(base_email(), :new_field, %{"a" => 1})
+
+      assert EmailBuilder.build(email)["new_field"] == %{"a" => 1}
+    end
+
+    test "override built fields" do
+      email = Swoosh.Email.put_provider_option(base_email(), :subject, "Overridden")
+
+      assert EmailBuilder.build(email)["subject"] == "Overridden"
+    end
+
+    test "leave the payload untouched when empty" do
+      assert EmailBuilder.build(base_email()) ==
+               EmailBuilder.build(%{base_email() | provider_options: %{}})
+    end
+  end
 end

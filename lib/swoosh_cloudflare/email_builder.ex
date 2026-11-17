@@ -10,7 +10,15 @@ defmodule SwooshCloudflare.EmailBuilder do
     |> put_optional("reply_to", format_reply_to(email.reply_to))
     |> put_optional("headers", email.headers)
     |> put_optional("attachments", build_attachments(email.attachments))
+    |> put_provider_options(email.provider_options)
   end
+
+  # Escape hatch: provider options override any built field.
+  defp put_provider_options(payload, options) when is_map(options) do
+    Enum.reduce(options, payload, fn {key, value}, acc -> Map.put(acc, to_string(key), value) end)
+  end
+
+  defp put_provider_options(payload, _), do: payload
 
   defp put_required(payload, email) do
     payload

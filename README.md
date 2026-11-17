@@ -61,6 +61,18 @@ Hackney API client is not needed. Disable it in `config/config.exs`:
 config :swoosh, :api_client, false
 ```
 
+Optional `:req_options` (a keyword list) are merged into the [Req](https://hexdocs.pm/req) options of every request, for the adapter, `send_raw/4` and `Suppressions`. Use it for a proxy, Finch pool, `connect_options`, `retry`, timeouts or `plug: {Req.Test, ...}`:
+
+```elixir
+config :my_app, MyApp.Mailer,
+  adapter: Swoosh.Adapters.Cloudflare,
+  api_token: System.fetch_env!("CLOUDFLARE_EMAIL_TOKEN"),
+  account_id: System.fetch_env!("CLOUDFLARE_ACCOUNT_ID"),
+  req_options: [receive_timeout: 30_000, retry: false]
+```
+
+Precedence is library defaults (`receive_timeout: 15_000`) < `:req_options` < per-call options. `method`, `url` and the Authorization header are always set by the library; extra `:headers` are appended.
+
 Define your mailer module:
 
 ```elixir
@@ -80,6 +92,14 @@ new()
 |> subject("Welcome!")
 |> html_body("<h1>Hello, Alice!</h1>")
 |> MyApp.Mailer.deliver()
+```
+
+### Provider options
+
+Values set with `Swoosh.Email.put_provider_option/3` are merged into the JSON payload (keys converted to strings) and override built fields. Use this as an escape hatch for API fields the adapter does not map yet:
+
+```elixir
+email |> Swoosh.Email.put_provider_option(:some_new_field, "value")
 ```
 
 ### Success response

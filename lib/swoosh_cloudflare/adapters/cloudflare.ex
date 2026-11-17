@@ -12,6 +12,30 @@ defmodule Swoosh.Adapters.Cloudflare do
         api_token: System.get_env("CLOUDFLARE_EMAIL_TOKEN"),
         account_id: System.get_env("CLOUDFLARE_ACCOUNT_ID")
 
+  ## Options
+
+  - `:base_url` - overrides the Cloudflare API base URL.
+  - `:req_options` - keyword list merged into the `Req` options of every request
+    (adapter, `SwooshCloudflare.send_raw/4` and `SwooshCloudflare.Suppressions`).
+    Use it for proxy, Finch pool, `connect_options`, `retry`, timeouts or
+    `plug: {Req.Test, ...}`. Precedence is library defaults (`receive_timeout: 15_000`)
+    < `:req_options` < per-call options. `method`, `url` and the Authorization header
+    are always set by the library; extra `:headers` are appended.
+
+        config :my_app, MyApp.Mailer,
+          adapter: Swoosh.Adapters.Cloudflare,
+          api_token: System.get_env("CLOUDFLARE_EMAIL_TOKEN"),
+          account_id: System.get_env("CLOUDFLARE_ACCOUNT_ID"),
+          req_options: [receive_timeout: 30_000, retry: false]
+
+  ## Provider options
+
+  `Swoosh.Email.put_provider_option/3` values are merged into the JSON payload
+  (keys converted to strings), overriding built fields. It is an escape hatch for API
+  fields this adapter does not map yet:
+
+      Swoosh.Email.put_provider_option(email, :some_new_field, "value")
+
   ## Success response
 
   `deliver/2` returns `{:ok, %{id: ..., delivered: [...], permanent_bounces: [...], queued: [...], suppressed_recipients: [...]}}`.

@@ -4,6 +4,7 @@ defmodule SwooshCloudflare.Client do
   alias SwooshCloudflare.Error
 
   @base_url "https://api.cloudflare.com/client/v4"
+  @default_receive_timeout 15_000
 
   @spec send(map(), keyword()) :: {:ok, map()} | {:error, term()}
   def send(payload, config), do: send_request("/send", payload, config)
@@ -38,11 +39,7 @@ defmodule SwooshCloudflare.Client do
     base = Keyword.get(config, :base_url, @base_url)
     url = "#{base}/accounts/#{config[:account_id]}/email/sending#{path}"
 
-    req_opts =
-      Keyword.merge(
-        [method: method, url: url, headers: headers(config), receive_timeout: 15_000],
-        req_opts
-      )
+    req_opts = build_req_opts(method, url, config, req_opts)
 
     case Req.request(req_opts) do
       {:ok, %{status: status, body: %{} = body}} when status in 200..299 ->
@@ -69,8 +66,30 @@ defmodule SwooshCloudflare.Client do
     end
   end
 
-  defp headers(config) do
-    [{"Authorization", "Bearer #{config[:api_token]}"}]
+  # Precedence: library defaults < config `:req_options` < per-call options.
+  # `method`, `url` and the Authorization header are always set by the library.
+  defp build_req_opts(method, url, config, call_opts) do
+    user_opts = Keyword.get(config, :req_options, [])
+
+    [receive_timeout: @default_receive_timeout]
+    |> Keyword.merge(Keyword.drop(user_opts, [:method, :url, :headers]))
+    |> Keyword.merge(call_opts)
+    |> Keyword.merge(
+      method: method,
+      url: url,
+      headers: headers(config, Keyword.get(user_opts, :headers, []))
+    )
+  end
+
+  defp headers(config, extra) do
+    extra =
+      extra
+      |> Enum.to_list()
+      |> Enum.reject(fn {name, _} ->
+        name |> to_string() |> String.downcase() == "authorization"
+      end)
+
+    [{"Authorization", "Bearer #{config[:api_token]}"} | extra]
   end
 
   defp parse_retry_after(nil), do: nil
