@@ -12,6 +12,14 @@ defmodule SwooshCloudflare.EmailBuilderTest do
     }
   end
 
+  defp assert_raise_any(fun) do
+    fun.()
+    flunk("expected an exception")
+  rescue
+    e in ExUnit.AssertionError -> reraise e, __STACKTRACE__
+    e -> e
+  end
+
   test "builds required fields" do
     payload = EmailBuilder.build(base_email())
 
@@ -125,7 +133,7 @@ defmodule SwooshCloudflare.EmailBuilderTest do
     assert att["content_id"] == "logo"
   end
 
-  test "omits content_id for regular attachments and empty cids" do
+  test "omits content_id for regular attachments" do
     regular = %Swoosh.Attachment{
       filename: "a.pdf",
       data: "x",
@@ -134,15 +142,7 @@ defmodule SwooshCloudflare.EmailBuilderTest do
       cid: "ignored"
     }
 
-    inline_empty = %Swoosh.Attachment{
-      filename: "b.png",
-      data: "x",
-      content_type: "image/png",
-      type: :inline,
-      cid: ""
-    }
-
-    email = %{base_email() | attachments: [regular, inline_empty]}
+    email = %{base_email() | attachments: [regular]}
     atts = EmailBuilder.build(email)["attachments"]
 
     refute Enum.any?(atts, &Map.has_key?(&1, "content_id"))
@@ -192,5 +192,53 @@ defmodule SwooshCloudflare.EmailBuilderTest do
     email = %{base_email() | reply_to: []}
 
     refute Map.has_key?(EmailBuilder.build(email), "reply_to")
+  end
+
+  test "falls back to filename for content_id on inline attachments without a cid" do
+    nil_cid = %Swoosh.Attachment{
+      filename: "a.png",
+      data: "x",
+      content_type: "image/png",
+      type: :inline,
+      cid: nil
+    }
+
+    empty_cid = %{nil_cid | filename: "b.png", cid: ""}
+
+    email = %{base_email() | attachments: [nil_cid, empty_cid]}
+    atts = EmailBuilder.build(email)["attachments"]
+
+    assert Enum.map(atts, & &1["content_id"]) == ["a.png", "b.png"]
+  end
+
+  test "omits content_id for inline attachments without cid or usable filename" do
+    att = %Swoosh.Attachment{
+      filename: "",
+      data: "x",
+      content_type: "image/png",
+      type: :inline,
+      cid: nil
+    }
+
+    [built] = EmailBuilder.build(%{base_email() | attachments: [att]})["attachments"]
+
+    refute Map.has_key?(built, "content_id")
+  end
+
+  test "raises when an attachment has neither data nor path" do
+    att = %Swoosh.Attachment{
+      filename: "a.txt",
+      data: nil,
+      path: nil,
+      content_type: "text/plain",
+      type: :attachment
+    }
+
+    # Swoosh raises AttachmentContentError for arity 1, but arity 2 with an
+    # encoding currently fails with a FunctionClauseError; accept either.
+    error =
+      assert_raise_any(fn -> EmailBuilder.build(%{base_email() | attachments: [att]}) end)
+
+    assert error.__struct__ in [Swoosh.AttachmentContentError, FunctionClauseError]
   end
 end

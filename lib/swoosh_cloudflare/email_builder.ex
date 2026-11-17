@@ -48,7 +48,7 @@ defmodule SwooshCloudflare.EmailBuilder do
   defp build_attachment(%Swoosh.Attachment{} = att) do
     %{
       "filename" => att.filename,
-      "content" => att |> read_data() |> Base.encode64(),
+      "content" => Swoosh.Attachment.get_content(att, :base64),
       "type" => att.content_type,
       "disposition" => disposition(att.type)
     }
@@ -59,14 +59,12 @@ defmodule SwooshCloudflare.EmailBuilder do
        when is_binary(cid) and cid != "",
        do: Map.put(map, "content_id", cid)
 
+  defp put_content_id(map, %Swoosh.Attachment{type: :inline, filename: filename})
+       when is_binary(filename) and filename != "",
+       do: Map.put(map, "content_id", filename)
+
   defp put_content_id(map, _att), do: map
 
   defp disposition(:inline), do: "inline"
   defp disposition(_), do: "attachment"
-
-  defp read_data(%Swoosh.Attachment{data: nil, path: path}) when not is_nil(path),
-    do: File.read!(path)
-
-  defp read_data(%Swoosh.Attachment{data: data}),
-    do: data
 end
