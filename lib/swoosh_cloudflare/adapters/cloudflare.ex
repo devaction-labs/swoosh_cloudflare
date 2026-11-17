@@ -103,8 +103,31 @@ defmodule Swoosh.Adapters.Cloudflare do
 
   alias SwooshCloudflare.{Client, EmailBuilder, Headers}
 
+  @typedoc "Successful send result."
+  @type send_result :: %{
+          id: String.t() | nil,
+          delivered: [String.t()],
+          permanent_bounces: [String.t()],
+          queued: [String.t()],
+          suppressed_recipients: [String.t()]
+        }
+
+  @typedoc """
+  Error returned by `deliver/2` and `SwooshCloudflare.send_raw/4`.
+
+  Besides the tuples below, transport errors (for example `Req.TransportError`)
+  are passed through unchanged.
+  """
+  @type error ::
+          {:invalid_header, String.t(), :use_api_field | :not_allowed | :invalid_value}
+          | {429, :rate_limited, non_neg_integer() | nil}
+          | {pos_integer(), :invalid_response, term()}
+          | {pos_integer(), atom(), term()}
+          | Exception.t()
+          | term()
+
   @impl true
-  @spec deliver(Swoosh.Email.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  @spec deliver(Swoosh.Email.t(), keyword()) :: {:ok, send_result()} | {:error, error()}
   def deliver(%Swoosh.Email{} = email, config) do
     with {:ok, headers} <- Headers.validate(email.headers) do
       %{email | headers: headers}
@@ -115,7 +138,7 @@ defmodule Swoosh.Adapters.Cloudflare do
 
   @impl true
   @spec deliver_many([Swoosh.Email.t()], keyword()) ::
-          {:ok, [{:ok, map()} | {:error, term()}]} | {:error, term()}
+          {:ok, [{:ok, send_result()} | {:error, error() | :timeout}]} | {:error, error()}
   def deliver_many(emails, config) do
     results =
       emails

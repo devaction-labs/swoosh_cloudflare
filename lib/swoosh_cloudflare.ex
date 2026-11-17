@@ -30,7 +30,8 @@ defmodule SwooshCloudflare do
       SwooshCloudflare.send_raw(mime, "noreply@example.com", ["alice@example.com"], config)
   """
   @spec send_raw(String.t(), String.t(), [String.t()], keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, Swoosh.Adapters.Cloudflare.send_result()}
+          | {:error, Swoosh.Adapters.Cloudflare.error()}
   def send_raw(mime_message, from, recipients, config)
       when is_binary(mime_message) and is_binary(from) and is_list(recipients) do
     Client.send_raw(
