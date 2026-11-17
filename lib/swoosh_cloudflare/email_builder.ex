@@ -48,7 +48,7 @@ defmodule SwooshCloudflare.EmailBuilder do
   defp build_attachment(%Swoosh.Attachment{} = att) do
     %{
       "filename" => att.filename,
-      "content" => Swoosh.Attachment.get_content(att, :base64),
+      "content" => att |> Swoosh.Attachment.get_content() |> Base.encode64(),
       "type" => att.content_type,
       "disposition" => disposition(att.type)
     }

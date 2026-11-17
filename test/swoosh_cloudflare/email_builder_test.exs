@@ -12,14 +12,6 @@ defmodule SwooshCloudflare.EmailBuilderTest do
     }
   end
 
-  defp assert_raise_any(fun) do
-    fun.()
-    flunk("expected an exception")
-  rescue
-    e in ExUnit.AssertionError -> reraise e, __STACKTRACE__
-    e -> e
-  end
-
   test "builds required fields" do
     payload = EmailBuilder.build(base_email())
 
@@ -234,11 +226,8 @@ defmodule SwooshCloudflare.EmailBuilderTest do
       type: :attachment
     }
 
-    # Swoosh raises AttachmentContentError for arity 1, but arity 2 with an
-    # encoding currently fails with a FunctionClauseError; accept either.
-    error =
-      assert_raise_any(fn -> EmailBuilder.build(%{base_email() | attachments: [att]}) end)
-
-    assert error.__struct__ in [Swoosh.AttachmentContentError, FunctionClauseError]
+    assert_raise Swoosh.AttachmentContentError, fn ->
+      EmailBuilder.build(%{base_email() | attachments: [att]})
+    end
   end
 end
