@@ -4,6 +4,9 @@ defmodule Swoosh.Adapters.Cloudflare do
 
   ## Configuration
 
+  Put this in `config/runtime.exs`, since it reads environment variables. This adapter
+  uses Req directly, so also set `config :swoosh, :api_client, false` in `config/config.exs`.
+
       config :my_app, MyApp.Mailer,
         adapter: Swoosh.Adapters.Cloudflare,
         api_token: System.get_env("CLOUDFLARE_EMAIL_TOKEN"),
