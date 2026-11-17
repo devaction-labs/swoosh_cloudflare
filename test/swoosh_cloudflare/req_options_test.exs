@@ -42,6 +42,20 @@ defmodule SwooshCloudflare.ReqOptionsTest do
     assert {:ok, _} = Cloudflare.deliver(email(), config)
   end
 
+  test "auth in req_options cannot override the Authorization header", %{
+    bypass: bypass,
+    config: config
+  } do
+    Bypass.expect_once(bypass, "POST", @path, fn conn ->
+      assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer tok"]
+      ok_resp(conn)
+    end)
+
+    config = Keyword.put(config, :req_options, auth: {:bearer, "other"})
+
+    assert {:ok, _} = Cloudflare.deliver(email(), config)
+  end
+
   test "receive_timeout from req_options overrides the default" do
     # A server that accepts connections and never answers.
     {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])

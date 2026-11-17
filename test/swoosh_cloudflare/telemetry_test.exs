@@ -21,7 +21,11 @@ defmodule SwooshCloudflare.TelemetryTest do
 
     :telemetry.attach_many(
       id,
-      [[:swoosh_cloudflare, :request, :start], [:swoosh_cloudflare, :request, :stop]],
+      [
+        [:swoosh_cloudflare, :request, :start],
+        [:swoosh_cloudflare, :request, :stop],
+        [:swoosh_cloudflare, :request, :exception]
+      ],
       &__MODULE__.handle_event/4,
       test_pid
     )
@@ -104,5 +108,19 @@ defmodule SwooshCloudflare.TelemetryTest do
 
     assert_receive {:event, [:swoosh_cloudflare, :request, :stop], _,
                     %{method: :get, path: "/suppressions/x", status: 200}}
+  end
+
+  test "invalid UTF-8 in send_raw raises without a telemetry exception event", %{config: config} do
+    assert_raise Jason.EncodeError, fn ->
+      SwooshCloudflare.send_raw(
+        <<0xFF, 0xFE, "secret">>,
+        "a@example.com",
+        ["b@example.com"],
+        config
+      )
+    end
+
+    refute_receive {:event, [:swoosh_cloudflare, :request, :exception], _, _}, 50
+    refute_receive {:event, [:swoosh_cloudflare, :request, :start], _, _}, 50
   end
 end

@@ -39,7 +39,7 @@ defmodule SwooshCloudflare.Client do
     base = Keyword.get(config, :base_url, @base_url)
     url = "#{base}/accounts/#{config[:account_id]}/email/sending#{path}"
 
-    req_opts = build_req_opts(method, url, config, req_opts)
+    req_opts = config |> build_req_opts(method, url, req_opts) |> encode_json()
 
     :telemetry.span([:swoosh_cloudflare, :request], %{method: method, path: path}, fn ->
       {result, status} = do_request(req_opts)
@@ -81,13 +81,28 @@ defmodule SwooshCloudflare.Client do
     end
   end
 
+  # Encodes the `:json` option up front, so an encoding error is raised to the caller
+  # outside the telemetry span and its message (which may hold payload bytes) never
+  # reaches telemetry metadata.
+  defp encode_json(req_opts) do
+    case Keyword.pop(req_opts, :json) do
+      {nil, opts} ->
+        opts
+
+      {json, opts} ->
+        body = Jason.encode!(json)
+        headers = Keyword.update!(opts, :headers, &[{"content-type", "application/json"} | &1])
+        Keyword.put(headers, :body, body)
+    end
+  end
+
   # Precedence: library defaults < config `:req_options` < per-call options.
   # `method`, `url` and the Authorization header are always set by the library.
-  defp build_req_opts(method, url, config, call_opts) do
+  defp build_req_opts(config, method, url, call_opts) do
     user_opts = Keyword.get(config, :req_options, [])
 
     [receive_timeout: @default_receive_timeout]
-    |> Keyword.merge(Keyword.drop(user_opts, [:method, :url, :headers]))
+    |> Keyword.merge(Keyword.drop(user_opts, [:method, :url, :headers, :auth]))
     |> Keyword.merge(call_opts)
     |> Keyword.merge(
       method: method,

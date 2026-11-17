@@ -83,4 +83,12 @@ defmodule SwooshCloudflare.DeliverManyTest do
     assert length(results) == 6
     assert :counters.get(peak, 1) == 1
   end
+
+  test "receive_timeout: :infinity does not raise", %{bypass: bypass, config: config} do
+    Bypass.expect(bypass, "POST", @path, echo_handler())
+    config = Keyword.put(config, :req_options, receive_timeout: :infinity)
+
+    assert {:ok, [{:ok, %{id: "u1@example.com"}}, {:ok, %{id: "u2@example.com"}}]} =
+             Cloudflare.deliver_many(emails(2), config)
+  end
 end
