@@ -4,6 +4,7 @@ defmodule SwooshCloudflare.Client do
   alias SwooshCloudflare.Error
 
   @base_url "https://api.cloudflare.com/client/v4"
+  @default_receive_timeout 15_000
 
   @spec send(map(), keyword()) :: {:ok, map()} | {:error, term()}
   def send(payload, config), do: send_request("/send", payload, config)
@@ -38,19 +39,30 @@ defmodule SwooshCloudflare.Client do
     base = Keyword.get(config, :base_url, @base_url)
     url = "#{base}/accounts/#{config[:account_id]}/email/sending#{path}"
 
-    req_opts =
-      Keyword.merge(
-        [method: method, url: url, headers: headers(config), receive_timeout: 15_000],
-        req_opts
-      )
+    req_opts = config |> build_req_opts(method, url, req_opts) |> encode_json()
 
+    :telemetry.span([:swoosh_cloudflare, :request], %{method: method, path: path}, fn ->
+      {result, status} = do_request(req_opts)
+
+      {result,
+       %{
+         method: method,
+         path: path,
+         status: status,
+         result: if(match?({:ok, _}, result), do: :ok, else: :error)
+       }}
+    end)
+  end
+
+  # Returns `{result, http_status | nil}`.
+  defp do_request(req_opts) do
     case Req.request(req_opts) do
       {:ok, %{status: status, body: %{} = body}} when status in 200..299 ->
-        {:ok, body}
+        {{:ok, body}, status}
 
       # A 2xx that is not JSON: the mail may or may not have gone, so it is an error, not a raise.
       {:ok, %{status: status, body: body}} when status in 200..299 ->
-        {:error, {status, :invalid_response, body}}
+        {{:error, {status, :invalid_response, body}}, status}
 
       {:ok, %{status: 429, headers: resp_headers}} ->
         retry_after =
@@ -59,18 +71,55 @@ defmodule SwooshCloudflare.Client do
           |> List.first()
           |> parse_retry_after()
 
-        {:error, {429, :rate_limited, retry_after}}
+        {{:error, {429, :rate_limited, retry_after}}, 429}
 
       {:ok, %{status: status, body: body}} ->
-        {:error, Error.from_response(status, body)}
+        {{:error, Error.from_response(status, body)}, status}
 
       {:error, reason} ->
-        {:error, reason}
+        {{:error, reason}, nil}
     end
   end
 
-  defp headers(config) do
-    [{"Authorization", "Bearer #{config[:api_token]}"}]
+  # Encodes the `:json` option up front, so an encoding error is raised to the caller
+  # outside the telemetry span and its message (which may hold payload bytes) never
+  # reaches telemetry metadata.
+  defp encode_json(req_opts) do
+    case Keyword.pop(req_opts, :json) do
+      {nil, opts} ->
+        opts
+
+      {json, opts} ->
+        body = Jason.encode!(json)
+        headers = Keyword.update!(opts, :headers, &[{"content-type", "application/json"} | &1])
+        Keyword.put(headers, :body, body)
+    end
+  end
+
+  # Precedence: library defaults < config `:req_options` < per-call options.
+  # `method`, `url` and the Authorization header are always set by the library.
+  defp build_req_opts(config, method, url, call_opts) do
+    user_opts = Keyword.get(config, :req_options, [])
+
+    [receive_timeout: @default_receive_timeout]
+    |> Keyword.merge(Keyword.drop(user_opts, [:method, :url, :headers, :auth]))
+    |> Keyword.merge(call_opts)
+    |> Keyword.merge(
+      method: method,
+      url: url,
+      headers: headers(config, Keyword.get(user_opts, :headers, []))
+    )
+  end
+
+  defp headers(config, extra) do
+    extra =
+      extra
+      |> Enum.to_list()
+      |> Enum.reject(fn {name, _} ->
+        name |> to_string() |> String.downcase() == "authorization"
+      end)
+
+    [{"Authorization", "Bearer #{config[:api_token]}"} | extra]
   end
 
   defp parse_retry_after(nil), do: nil

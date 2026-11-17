@@ -9,7 +9,7 @@
 ```elixir
 def deps do
   [
-    {:swoosh_cloudflare, "~> 0.5"}
+    {:swoosh_cloudflare, "~> 0.6"}
   ]
 end
 ```
@@ -61,6 +61,18 @@ Hackney API client is not needed. Disable it in `config/config.exs`:
 config :swoosh, :api_client, false
 ```
 
+Optional `:req_options` (a keyword list) are merged into the [Req](https://hexdocs.pm/req) options of every request, for the adapter, `send_raw/4` and `Suppressions`. Use it for a proxy, Finch pool, `connect_options`, `retry`, timeouts or `plug: {Req.Test, ...}`:
+
+```elixir
+config :my_app, MyApp.Mailer,
+  adapter: Swoosh.Adapters.Cloudflare,
+  api_token: System.fetch_env!("CLOUDFLARE_EMAIL_TOKEN"),
+  account_id: System.fetch_env!("CLOUDFLARE_ACCOUNT_ID"),
+  req_options: [receive_timeout: 30_000, retry: false]
+```
+
+Precedence is library defaults (`receive_timeout: 15_000`) < `:req_options` < per-call options. `method`, `url` and the Authorization header are always set by the library; extra `:headers` are appended.
+
 Define your mailer module:
 
 ```elixir
@@ -82,6 +94,18 @@ new()
 |> MyApp.Mailer.deliver()
 ```
 
+### Sending many emails
+
+`MyApp.Mailer.deliver_many/1` sends concurrently and returns `{:ok, results}` with one result per email, in input order. Set `:max_concurrency` in the mailer config (default `System.schedulers_online()`) to limit parallelism. Each task times out after the effective `receive_timeout` (from `:req_options`, default 15 000 ms) plus 5 000 ms, giving `{:error, :timeout}`. A timeout result is ambiguous: the email may have been sent.
+
+### Provider options
+
+Values set with `Swoosh.Email.put_provider_option/3` are merged into the JSON payload (keys converted to strings) and override built fields. Use this as an escape hatch for API fields the adapter does not map yet:
+
+```elixir
+email |> Swoosh.Email.put_provider_option(:some_new_field, "value")
+```
+
 ### Success response
 
 `deliver/2` returns a map:
@@ -98,6 +122,31 @@ new()
 
 - `id` is the Cloudflare message ID, which you can trace in the Email Service activity log.
 - `suppressed_recipients` lists recipients dropped because they are on the suppression list (only when "Drop suppressed recipients" is enabled on the sending domain).
+
+## Headers and one-click unsubscribe
+
+Custom headers are validated before any request. Headers controlled by Cloudflare (`Date`, `Message-ID`, `MIME-Version`, `Content-Type`, `Content-Transfer-Encoding`, `DKIM-Signature`, `Return-Path`, `Received`, `Feedback-ID`, `ARC-*`, `TLS-*`, `CFBL-*`) and headers with a dedicated API field (`From`, `To`, `Cc`, `Bcc`, `Subject`, `Reply-To`) are rejected, case-insensitively, without making a request:
+
+```elixir
+{:error, {:invalid_header, "Date", :not_allowed}}
+{:error, {:invalid_header, "Subject", :use_api_field}}
+{:error, {:invalid_header, "X-Foo", :invalid_value}}  # nil value
+```
+
+See the [Cloudflare header reference](https://developers.cloudflare.com/email-service/reference/headers/) for all rules. Non-string header values are converted with `to_string/1`.
+
+Use `SwooshCloudflare.put_list_unsubscribe/3` for one-click unsubscribe (RFC 8058). The URL must be `https://`:
+
+```elixir
+email
+|> SwooshCloudflare.put_list_unsubscribe("https://example.com/unsubscribe/abc",
+  mailto: "unsubscribe@example.com"
+)
+# List-Unsubscribe: <https://example.com/unsubscribe/abc>, <mailto:unsubscribe@example.com>
+# List-Unsubscribe-Post: List-Unsubscribe=One-Click
+```
+
+Pass `one_click: false` to skip the `List-Unsubscribe-Post` header.
 
 ## Inline images
 
@@ -209,6 +258,26 @@ Telemetry works out of the box via `Swoosh.Mailer` — no extra configuration ne
 
 - `[:swoosh, :deliver, :start | :stop | :exception]`
 - `[:swoosh, :deliver_many, :start | :stop | :exception]`
+
+In addition, this library emits a span around every HTTP request it makes (adapter, `send_raw/4` and `Suppressions`):
+
+- `[:swoosh_cloudflare, :request, :start]` with metadata `%{method: :post, path: "/send"}`
+- `[:swoosh_cloudflare, :request, :stop]` with `%{duration: native_time}` measurements and metadata `%{method: atom, path: String.t(), status: integer | nil, result: :ok | :error}`. `status` is `nil` on transport errors.
+- `[:swoosh_cloudflare, :request, :exception]` if the request raises.
+
+`path` is relative to `/accounts/{account_id}/email/sending`. The API token and the payload are never included in the metadata.
+
+```elixir
+:telemetry.attach(
+  "log-cloudflare-requests",
+  [:swoosh_cloudflare, :request, :stop],
+  fn _event, %{duration: d}, meta, _ ->
+    ms = System.convert_time_unit(d, :native, :millisecond)
+    Logger.info("cloudflare #{meta.method} #{meta.path} -> #{inspect(meta.status)} (#{ms}ms)")
+  end,
+  nil
+)
+```
 
 See the [Swoosh telemetry documentation](https://hexdocs.pm/swoosh/Swoosh.Mailer.html#module-telemetry) for details on attaching handlers.
 
