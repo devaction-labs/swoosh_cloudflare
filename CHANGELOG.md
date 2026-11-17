@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] - 2026-11-17
 
+### Changed
+
+- Minimum Elixir is now 1.16, matching Swoosh.
+
 ### Added
 
 - `:req_options` config, merged into the `Req` options of every request (proxy, Finch pool, `retry`, timeouts, `Req.Test` plugs). Precedence is library defaults < `:req_options` < per-call options. (#15)

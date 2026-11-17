@@ -8,7 +8,7 @@ defmodule SwooshCloudflare.MixProject do
     [
       app: :swoosh_cloudflare,
       version: @version,
-      elixir: "~> 1.14",
+      elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: "Swoosh adapter for Cloudflare Email Service",
