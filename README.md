@@ -9,7 +9,7 @@
 ```elixir
 def deps do
   [
-    {:swoosh_cloudflare, "~> 0.6"}
+    {:swoosh_cloudflare, "~> 0.7"}
   ]
 end
 ```
