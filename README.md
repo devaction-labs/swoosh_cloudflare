@@ -9,7 +9,7 @@
 ```elixir
 def deps do
   [
-    {:swoosh_cloudflare, "~> 0.4"}
+    {:swoosh_cloudflare, "~> 0.5"}
   ]
 end
 ```
@@ -105,9 +105,53 @@ new()
 |> attachment(Swoosh.Attachment.new("logo.png", type: :inline, cid: "logo"))
 ```
 
+## Raw MIME messages
+
+To send a MIME message you built yourself, use `SwooshCloudflare.send_raw/4`. It takes the message, the envelope sender, the envelope recipients and the mailer config, and returns the same values as `deliver/2`:
+
+```elixir
+config = Application.get_env(:my_app, MyApp.Mailer)
+
+SwooshCloudflare.send_raw(mime_message, "noreply@yourdomain.com", ["alice@example.com"], config)
+#=> {:ok, %{id: "message-id", delivered: ["alice@example.com"], ...}}
+```
+
+## Suppressions
+
+`SwooshCloudflare.Suppressions` manages the suppression list. Every function takes the mailer config as its last argument, and suppressions are returned as decoded maps with string keys.
+
+```elixir
+alias SwooshCloudflare.Suppressions
+
+config = Application.get_env(:my_app, MyApp.Mailer)
+
+# List (cursor-based pagination)
+{:ok, %{suppressions: list, next_cursor: cursor}} =
+  Suppressions.list(config, reason: :hard_bounce, per_page: 100)
+
+# Fetch the next page when next_cursor is not nil
+{:ok, page2} = Suppressions.list(config, cursor: cursor)
+
+# Create, optionally scoped to a sending domain and/or temporary
+{:ok, suppression} =
+  Suppressions.create("bob@example.com", config,
+    scope: {:sending_domain, "mail.example.com"},
+    note: "asked to stop",
+    expires_at: ~U[2030-01-01 00:00:00Z]
+  )
+
+# Get, update (expires_at: nil makes it permanent, note: "" clears it), delete
+{:ok, _} = Suppressions.get(suppression["id"], config)
+{:ok, _} = Suppressions.update(suppression["id"], config, expires_at: nil)
+{:ok, _} = Suppressions.delete(suppression["id"], config)
+
+# Bulk import (max 1000 items)
+{:ok, _} = Suppressions.import([%{email: "a@example.com"}, %{email: "b@example.com"}], config)
+```
+
 ## Error handling
 
-`deliver/2` returns `{:error, {http_status, reason, body}}` on most errors, where `body` is Cloudflare's response body (decoded JSON, or the raw text for non-JSON responses) so the original message is never lost.
+`deliver/2`, `send_raw/4` and the `Suppressions` functions return `{:error, {http_status, reason, body}}` on most errors, where `body` is Cloudflare's response body (decoded JSON, or the raw text for non-JSON responses) so the original message is never lost.
 
 For **429 rate limiting**, the third element is the `Retry-After` value in seconds (or `nil` if the header was absent):
 
