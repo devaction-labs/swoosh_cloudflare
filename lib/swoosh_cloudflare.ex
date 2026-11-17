@@ -31,7 +31,7 @@ defmodule SwooshCloudflare do
 
   `from` is the envelope sender and `recipients` the envelope recipients.
 
-  Returns the same values as `Swoosh.Adapters.Cloudflare.deliver/2`:
+  Returns the same values as the mailer when using `Swoosh.Adapters.Cloudflare`:
   `{:ok, %{id: ..., delivered: [...], permanent_bounces: [...], queued: [...], suppressed_recipients: [...]}}`,
   `{:error, {status, reason, body}}` or `{:error, {429, :rate_limited, retry_after}}`.
 
