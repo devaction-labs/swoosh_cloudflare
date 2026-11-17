@@ -81,8 +81,10 @@ defmodule Swoosh.Adapters.Cloudflare do
 
   - `{:error, {:invalid_header, header_name, :use_api_field}}`
   - `{:error, {:invalid_header, header_name, :not_allowed}}`
-  - `{:error, {:invalid_header, header_name, :invalid_value}}` (a `nil` value)
+  - `{:error, {:invalid_header, header_name, :invalid_value}}` (a `nil`, empty or unconvertible value)
 
+  Headers set through `provider_options` are validated the same way. Empty values
+  and values that cannot be converted to a string are also `:invalid_value`.
   Non-string header values are converted with `to_string/1`. Cloudflare applies
   further rules of its own (for example only `X-*` and a fixed set of standard
   headers are accepted); those are reported by the API as usual.
@@ -129,12 +131,23 @@ defmodule Swoosh.Adapters.Cloudflare do
   @impl true
   @spec deliver(Swoosh.Email.t(), keyword()) :: {:ok, send_result()} | {:error, error()}
   def deliver(%Swoosh.Email{} = email, config) do
-    with {:ok, headers} <- Headers.validate(email.headers) do
-      %{email | headers: headers}
-      |> EmailBuilder.build()
-      |> Client.send(config)
+    payload = EmailBuilder.build(email)
+
+    with {:ok, payload} <- validate_headers(payload) do
+      Client.send(payload, config)
     end
   end
+
+  # Validates the final payload, so headers coming from provider options are covered too.
+  defp validate_headers(%{"headers" => headers} = payload) do
+    with {:ok, headers} <- Headers.validate(headers) do
+      if headers == %{},
+        do: {:ok, Map.delete(payload, "headers")},
+        else: {:ok, Map.put(payload, "headers", headers)}
+    end
+  end
+
+  defp validate_headers(payload), do: {:ok, payload}
 
   @impl true
   @spec deliver_many([Swoosh.Email.t()], keyword()) ::
@@ -160,6 +173,6 @@ defmodule Swoosh.Adapters.Cloudflare do
     receive_timeout =
       config |> Keyword.get(:req_options, []) |> Keyword.get(:receive_timeout, 15_000)
 
-    receive_timeout + 5_000
+    if receive_timeout == :infinity, do: :infinity, else: receive_timeout + 5_000
   end
 end

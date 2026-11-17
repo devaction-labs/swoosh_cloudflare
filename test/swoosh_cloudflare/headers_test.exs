@@ -35,6 +35,20 @@ defmodule SwooshCloudflare.HeadersTest do
                Headers.validate(%{"X-Foo" => nil})
     end
 
+    test "rejects empty and blank values" do
+      for value <- ["", "   ", :""] do
+        assert {:error, {:invalid_header, "X-Foo", :invalid_value}} =
+                 Headers.validate(%{"X-Foo" => value})
+      end
+    end
+
+    test "rejects values that cannot be converted instead of raising" do
+      for value <- [%{a: 1}, {1, 2}, [:a, {}], self()] do
+        assert {:error, {:invalid_header, "X-Foo", :invalid_value}} =
+                 Headers.validate(%{"X-Foo" => value})
+      end
+    end
+
     test "rejects platform-controlled headers case-insensitively" do
       for name <-
             ~w(Date message-id MIME-Version CONTENT-TYPE Content-Transfer-Encoding
@@ -62,6 +76,20 @@ defmodule SwooshCloudflare.HeadersTest do
 
       assert {:error, {:invalid_header, "subject", :use_api_field}} =
                Cloudflare.deliver(email([{"subject", "x"}]), config)
+    end
+
+    test "validates headers coming from provider_options" do
+      config = [api_token: "t", account_id: "a", base_url: "http://localhost:1"]
+
+      for {headers, expected} <- [
+            {%{"Message-ID" => "<x@y>"}, {:invalid_header, "Message-ID", :not_allowed}},
+            {%{headers: %{"Subject" => "x"}}, {:invalid_header, "Subject", :use_api_field}},
+            {%{"X-Foo" => ""}, {:invalid_header, "X-Foo", :invalid_value}}
+          ] do
+        headers = if Map.has_key?(headers, :headers), do: headers.headers, else: headers
+        email = Swoosh.Email.put_provider_option(email([]), :headers, headers)
+        assert {:error, ^expected} = Cloudflare.deliver(email, config)
+      end
     end
 
     test "sends valid headers stringified" do

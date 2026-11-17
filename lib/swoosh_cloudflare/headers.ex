@@ -35,11 +35,13 @@ defmodule SwooshCloudflare.Headers do
       name = to_string(name)
 
       case check(name, value) do
-        :ok -> {:cont, {:ok, Map.put(acc, name, stringify(value))}}
+        {:ok, string} -> {:cont, {:ok, Map.put(acc, name, string)}}
         {:error, reason} -> {:halt, {:error, {:invalid_header, name, reason}}}
       end
     end)
   end
+
+  def validate(_other), do: {:error, {:invalid_header, "headers", :invalid_value}}
 
   defp check(name, value) do
     lower = String.downcase(name)
@@ -48,11 +50,27 @@ defmodule SwooshCloudflare.Headers do
       lower in @api_fields -> {:error, :use_api_field}
       lower in @platform_controlled -> {:error, :not_allowed}
       Enum.any?(@platform_prefixes, &String.starts_with?(lower, &1)) -> {:error, :not_allowed}
-      is_nil(value) -> {:error, :invalid_value}
-      true -> :ok
+      true -> stringify(value)
     end
   end
 
-  defp stringify(value) when is_binary(value), do: value
-  defp stringify(value), do: to_string(value)
+  defp stringify(nil), do: {:error, :invalid_value}
+
+  defp stringify(value) do
+    case safe_to_string(value) do
+      {:ok, string} ->
+        if String.trim(string) == "", do: {:error, :invalid_value}, else: {:ok, string}
+
+      :error ->
+        {:error, :invalid_value}
+    end
+  end
+
+  defp safe_to_string(value) when is_binary(value), do: {:ok, value}
+
+  defp safe_to_string(value) do
+    {:ok, to_string(value)}
+  rescue
+    _ -> :error
+  end
 end
