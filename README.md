@@ -119,6 +119,31 @@ email |> Swoosh.Email.put_provider_option(:some_new_field, "value")
 - `id` is the Cloudflare message ID, which you can trace in the Email Service activity log.
 - `suppressed_recipients` lists recipients dropped because they are on the suppression list (only when "Drop suppressed recipients" is enabled on the sending domain).
 
+## Headers and one-click unsubscribe
+
+Custom headers are validated before any request. Headers controlled by Cloudflare (`Date`, `Message-ID`, `MIME-Version`, `Content-Type`, `Content-Transfer-Encoding`, `DKIM-Signature`, `Return-Path`, `Received`, `Feedback-ID`, `ARC-*`, `TLS-*`, `CFBL-*`) and headers with a dedicated API field (`From`, `To`, `Cc`, `Bcc`, `Subject`, `Reply-To`) are rejected, case-insensitively, without making a request:
+
+```elixir
+{:error, {:invalid_header, "Date", :not_allowed}}
+{:error, {:invalid_header, "Subject", :use_api_field}}
+{:error, {:invalid_header, "X-Foo", :invalid_value}}  # nil value
+```
+
+See the [Cloudflare header reference](https://developers.cloudflare.com/email-service/reference/headers/) for all rules. Non-string header values are converted with `to_string/1`.
+
+Use `SwooshCloudflare.put_list_unsubscribe/3` for one-click unsubscribe (RFC 8058). The URL must be `https://`:
+
+```elixir
+email
+|> SwooshCloudflare.put_list_unsubscribe("https://example.com/unsubscribe/abc",
+  mailto: "unsubscribe@example.com"
+)
+# List-Unsubscribe: <https://example.com/unsubscribe/abc>, <mailto:unsubscribe@example.com>
+# List-Unsubscribe-Post: List-Unsubscribe=One-Click
+```
+
+Pass `one_click: false` to skip the `List-Unsubscribe-Post` header.
+
 ## Inline images
 
 Use `type: :inline` with a `cid`, and reference it from the HTML body:

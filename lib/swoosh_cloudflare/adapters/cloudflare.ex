@@ -64,6 +64,24 @@ defmodule Swoosh.Adapters.Cloudflare do
   Any 2xx with a JSON body is success; a 2xx without one is
   `{:error, {status, :invalid_response, body}}`.
 
+  ## Header validation
+
+  Custom headers are validated before any request is made. Headers Cloudflare
+  controls (`Date`, `Message-ID`, `MIME-Version`, `Content-Type`,
+  `Content-Transfer-Encoding`, `DKIM-Signature`, `Return-Path`, `Received`,
+  `Feedback-ID`, `ARC-*`, `TLS-*`, `CFBL-*`) and headers that have a dedicated
+  API field (`From`, `To`, `Cc`, `Bcc`, `Subject`, `Reply-To`) are rejected,
+  case-insensitively, and no request is sent:
+
+  - `{:error, {:invalid_header, header_name, :use_api_field}}`
+  - `{:error, {:invalid_header, header_name, :not_allowed}}`
+  - `{:error, {:invalid_header, header_name, :invalid_value}}` (a `nil` value)
+
+  Non-string header values are converted with `to_string/1`. Cloudflare applies
+  further rules of its own (for example only `X-*` and a fixed set of standard
+  headers are accepted); those are reported by the API as usual.
+  See `SwooshCloudflare.put_list_unsubscribe/3` for one-click unsubscribe.
+
   ## Limitations
 
   - Maximum total message size is 25 MiB, including attachments.
@@ -77,13 +95,16 @@ defmodule Swoosh.Adapters.Cloudflare do
 
   use Swoosh.Adapter, required_config: [:api_token, :account_id]
 
-  alias SwooshCloudflare.{Client, EmailBuilder}
+  alias SwooshCloudflare.{Client, EmailBuilder, Headers}
 
   @impl true
   @spec deliver(Swoosh.Email.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def deliver(%Swoosh.Email{} = email, config) do
-    payload = EmailBuilder.build(email)
-    Client.send(payload, config)
+    with {:ok, headers} <- Headers.validate(email.headers) do
+      %{email | headers: headers}
+      |> EmailBuilder.build()
+      |> Client.send(config)
+    end
   end
 
   @impl true
