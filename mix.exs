@@ -27,6 +27,7 @@ defmodule SwooshCloudflare.MixProject do
     [
       {:swoosh, "~> 1.0"},
       {:req, "~> 0.5"},
+      {:telemetry, "~> 1.0"},
       {:jason, "~> 1.4"},
       {:bypass, "~> 2.1", only: :test},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}

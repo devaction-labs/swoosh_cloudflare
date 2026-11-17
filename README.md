@@ -255,6 +255,26 @@ Telemetry works out of the box via `Swoosh.Mailer` — no extra configuration ne
 - `[:swoosh, :deliver, :start | :stop | :exception]`
 - `[:swoosh, :deliver_many, :start | :stop | :exception]`
 
+In addition, this library emits a span around every HTTP request it makes (adapter, `send_raw/4` and `Suppressions`):
+
+- `[:swoosh_cloudflare, :request, :start]` with metadata `%{method: :post, path: "/send"}`
+- `[:swoosh_cloudflare, :request, :stop]` with `%{duration: native_time}` measurements and metadata `%{method: atom, path: String.t(), status: integer | nil, result: :ok | :error}`. `status` is `nil` on transport errors.
+- `[:swoosh_cloudflare, :request, :exception]` if the request raises.
+
+`path` is relative to `/accounts/{account_id}/email/sending`. The API token and the payload are never included in the metadata.
+
+```elixir
+:telemetry.attach(
+  "log-cloudflare-requests",
+  [:swoosh_cloudflare, :request, :stop],
+  fn _event, %{duration: d}, meta, _ ->
+    ms = System.convert_time_unit(d, :native, :millisecond)
+    Logger.info("cloudflare #{meta.method} #{meta.path} -> #{inspect(meta.status)} (#{ms}ms)")
+  end,
+  nil
+)
+```
+
 See the [Swoosh telemetry documentation](https://hexdocs.pm/swoosh/Swoosh.Mailer.html#module-telemetry) for details on attaching handlers.
 
 ## Resources

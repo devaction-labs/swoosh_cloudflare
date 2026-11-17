@@ -41,13 +41,28 @@ defmodule SwooshCloudflare.Client do
 
     req_opts = build_req_opts(method, url, config, req_opts)
 
+    :telemetry.span([:swoosh_cloudflare, :request], %{method: method, path: path}, fn ->
+      {result, status} = do_request(req_opts)
+
+      {result,
+       %{
+         method: method,
+         path: path,
+         status: status,
+         result: if(match?({:ok, _}, result), do: :ok, else: :error)
+       }}
+    end)
+  end
+
+  # Returns `{result, http_status | nil}`.
+  defp do_request(req_opts) do
     case Req.request(req_opts) do
       {:ok, %{status: status, body: %{} = body}} when status in 200..299 ->
-        {:ok, body}
+        {{:ok, body}, status}
 
       # A 2xx that is not JSON: the mail may or may not have gone, so it is an error, not a raise.
       {:ok, %{status: status, body: body}} when status in 200..299 ->
-        {:error, {status, :invalid_response, body}}
+        {{:error, {status, :invalid_response, body}}, status}
 
       {:ok, %{status: 429, headers: resp_headers}} ->
         retry_after =
@@ -56,13 +71,13 @@ defmodule SwooshCloudflare.Client do
           |> List.first()
           |> parse_retry_after()
 
-        {:error, {429, :rate_limited, retry_after}}
+        {{:error, {429, :rate_limited, retry_after}}, 429}
 
       {:ok, %{status: status, body: body}} ->
-        {:error, Error.from_response(status, body)}
+        {{:error, Error.from_response(status, body)}, status}
 
       {:error, reason} ->
-        {:error, reason}
+        {{:error, reason}, nil}
     end
   end
 
