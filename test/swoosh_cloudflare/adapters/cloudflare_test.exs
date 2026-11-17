@@ -257,13 +257,13 @@ defmodule Swoosh.Adapters.CloudflareTest do
              Cloudflare.deliver(base_email(), config)
   end
 
-  test "returns unknown_error with the text of a non-JSON error", %{
+  test "falls back on status with the text of a non-JSON error", %{
     bypass: bypass,
     config: config
   } do
     respond(bypass, 502, "<html>Bad gateway</html>", "text/html")
 
-    assert {:error, {502, :unknown_error, "<html>Bad gateway</html>"}} =
+    assert {:error, {502, :server_error, "<html>Bad gateway</html>"}} =
              Cloudflare.deliver(base_email(), config)
   end
 
