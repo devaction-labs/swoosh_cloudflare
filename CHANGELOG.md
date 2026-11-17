@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-17
+
+### Added
+
+- `SwooshCloudflare.Subdomains` to list, get, create, update and delete sending subdomains and to fetch their DNS records. (#21)
+- `SwooshCloudflare.Event`, a struct and `parse/1` for Email Sending lifecycle events. (#20)
+- `SwooshCloudflare.Queues`, an HTTP pull consumer (`pull/3`, `ack/4`) for receiving those events from a Cloudflare Queue. (#20)
+- `SwooshCloudflare.Analytics` with `query/3` for the GraphQL Analytics API and `message_events/4` to look up the events of one message. GraphQL `errors` are returned as `{:error, {status, :graphql_error, errors}}`. (#22)
+
+### Changed
+
+- The internal HTTP client can now call any path under `:base_url`, not only `/accounts/{account_id}/email/sending`. Existing behavior, error shapes and telemetry are unchanged. The new modules report the full path after the base URL in the `[:swoosh_cloudflare, :request]` telemetry metadata.
+
 ## [0.6.0] - 2026-11-17
 
 ### Changed
@@ -19,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SwooshCloudflare.put_list_unsubscribe/3` for one-click unsubscribe headers. (#16)
 - Telemetry span `[:swoosh_cloudflare, :request, :start | :stop | :exception]` around every HTTP request. `telemetry` is now a direct dependency. (#17)
 - `:max_concurrency` config for `deliver_many/2`. (#18)
-- Public types `Swoosh.Adapters.Cloudflare.send_result/0` and `error/0`. (#19)
+- Public types `t:Swoosh.Adapters.Cloudflare.send_result/0` and `t:Swoosh.Adapters.Cloudflare.error/0`. (#19)
 - `LICENSE`, `CHANGELOG.md`, CI workflow, Credo and Dialyxir. (#19)
 
 ### Changed

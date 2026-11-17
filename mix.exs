@@ -56,7 +56,13 @@ defmodule SwooshCloudflare.MixProject do
       extras: ["README.md", "CHANGELOG.md"],
       groups_for_modules: [
         Adapter: [Swoosh.Adapters.Cloudflare],
-        API: [SwooshCloudflare, SwooshCloudflare.Suppressions]
+        API: [
+          SwooshCloudflare,
+          SwooshCloudflare.Suppressions,
+          SwooshCloudflare.Subdomains,
+          SwooshCloudflare.Analytics
+        ],
+        Events: [SwooshCloudflare.Event, SwooshCloudflare.Queues]
       ]
     ]
   end
