@@ -9,7 +9,7 @@
 ```elixir
 def deps do
   [
-    {:swoosh_cloudflare, "~> 0.6"}
+    {:swoosh_cloudflare, "~> 0.7"}
   ]
 end
 ```
@@ -207,9 +207,85 @@ config = Application.get_env(:my_app, MyApp.Mailer)
 {:ok, _} = Suppressions.import([%{email: "a@example.com"}, %{email: "b@example.com"}], config)
 ```
 
+## Sending subdomains
+
+`SwooshCloudflare.Subdomains` manages the sending subdomains of a zone. They are zone-scoped, so every function takes the `zone_id` first; only `:api_token` is needed in the config. Subdomains are returned as decoded maps with string keys.
+
+```elixir
+alias SwooshCloudflare.Subdomains
+
+zone_id = "023e105f4ecef8ad9ca31a8372d0c353"
+
+{:ok, subdomains} = Subdomains.list(zone_id, config)
+{:ok, sub} = Subdomains.create(zone_id, "send.example.com", config)
+{:ok, _} = Subdomains.get(zone_id, sub["tag"], config)
+
+# Only the given fields are sent: :drop_suppressed_recipients and :preview_enabled
+{:ok, _} = Subdomains.update(zone_id, sub["tag"], config, drop_suppressed_recipients: true)
+
+# DNS records to add so the subdomain can be verified
+{:ok, records} = Subdomains.dns_records(zone_id, sub["tag"], config)
+
+{:ok, _} = Subdomains.delete(zone_id, sub["tag"], config)
+```
+
+## Events and Queues
+
+Cloudflare can publish Email Sending lifecycle events (`delivered`, `deferred`, `bounced`, `failed`, `rejected`, `complained`) to a [Queue](https://developers.cloudflare.com/email-service/reference/event-subscriptions/). Create an event subscription for your sending domain, enable [HTTP pull](https://developers.cloudflare.com/queues/configuration/pull-consumers/) on the queue, and consume it with `SwooshCloudflare.Queues`.
+
+The API token needs the Queues read and write permissions ("Account > Queues > Edit"), because acknowledging a message writes to the queue. Config needs `:api_token` and `:account_id`.
+
+```elixir
+alias SwooshCloudflare.Queues
+
+{:ok, messages} = Queues.pull(queue_id, config, batch_size: 50, visibility_timeout_ms: 30_000)
+
+for %{event: %SwooshCloudflare.Event{type: :bounced} = event} <- messages do
+  MyApp.Mailing.mark_bounced(event.recipient, event.bounce)
+end
+
+# Acknowledge what you processed; mark the rest for retry, optionally delayed
+Queues.ack(queue_id, [done.lease_id], config, retries: [{failed.lease_id, 60}])
+```
+
+Each message is `%{id, lease_id, attempts, timestamp_ms, body, event}`. `event` is a `SwooshCloudflare.Event` (or `nil` when the body is not an Email Sending event). `SwooshCloudflare.Event.parse/1` also accepts a decoded map or JSON string if you receive the events some other way. Queues uses short polling, so sleep between empty pulls; the library ships no consumer process, run the loop under your own supervised process (see `SwooshCloudflare.Queues` for a minimal example).
+
+Whether an event's `message_id` matches the id returned by `deliver/2` is not documented by Cloudflare and has not been verified, see `SwooshCloudflare.Event`.
+
+## Analytics
+
+`SwooshCloudflare.Analytics` queries the [GraphQL Analytics API](https://developers.cloudflare.com/analytics/graphql-api/). The API token needs the **Analytics Read** permission, and only `:api_token` is needed in the config. Email Service datasets are zone-level and retained for 31 days.
+
+```elixir
+alias SwooshCloudflare.Analytics
+
+{:ok, data} =
+  Analytics.query(
+    """
+    query($zoneTag: string!, $start: Date!, $end: Date!) {
+      viewer {
+        zones(filter: {zoneTag: $zoneTag}) {
+          emailSendingAdaptiveGroups(filter: {date_geq: $start, date_leq: $end}, limit: 100) {
+            count
+            dimensions { date status }
+          }
+        }
+      }
+    }
+    """,
+    %{"zoneTag" => zone_id, "start" => "2026-06-01", "end" => "2026-06-07"},
+    config
+  )
+
+# Individual delivery events of one message (last 24 hours by default)
+{:ok, rows} = Analytics.message_events(zone_id, message_id, config, limit: 20)
+```
+
+GraphQL `errors` in a successful HTTP response are returned as `{:error, {200, :graphql_error, errors}}`. Filtering `message_events/4` by `messageId` is not shown in Cloudflare's documentation and is unverified.
+
 ## Error handling
 
-`deliver/2`, `send_raw/4` and the `Suppressions` functions return `{:error, {http_status, reason, body}}` on most errors, where `body` is Cloudflare's response body (decoded JSON, or the raw text for non-JSON responses) so the original message is never lost.
+`deliver/2`, `send_raw/4` and the `Suppressions`, `Subdomains`, `Queues` and `Analytics` functions return `{:error, {http_status, reason, body}}` on most errors, where `body` is Cloudflare's response body (decoded JSON, or the raw text for non-JSON responses) so the original message is never lost.
 
 For **429 rate limiting**, the third element is the `Retry-After` value in seconds (or `nil` if the header was absent):
 
@@ -259,13 +335,13 @@ Telemetry works out of the box via `Swoosh.Mailer` — no extra configuration ne
 - `[:swoosh, :deliver, :start | :stop | :exception]`
 - `[:swoosh, :deliver_many, :start | :stop | :exception]`
 
-In addition, this library emits a span around every HTTP request it makes (adapter, `send_raw/4` and `Suppressions`):
+In addition, this library emits a span around every HTTP request it makes (adapter, `send_raw/4`, `Suppressions`, `Subdomains`, `Queues` and `Analytics`):
 
 - `[:swoosh_cloudflare, :request, :start]` with metadata `%{method: :post, path: "/send"}`
 - `[:swoosh_cloudflare, :request, :stop]` with `%{duration: native_time}` measurements and metadata `%{method: atom, path: String.t(), status: integer | nil, result: :ok | :error}`. `status` is `nil` on transport errors.
 - `[:swoosh_cloudflare, :request, :exception]` if the request raises.
 
-`path` is relative to `/accounts/{account_id}/email/sending`. The API token and the payload are never included in the metadata.
+For the adapter, `send_raw/4` and `Suppressions`, `path` is relative to `/accounts/{account_id}/email/sending`; for `Subdomains`, `Queues` and `Analytics` it is the full path after the base URL (for example `/graphql`). The API token and the payload are never included in the metadata.
 
 ```elixir
 :telemetry.attach(

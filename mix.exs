@@ -1,7 +1,7 @@
 defmodule SwooshCloudflare.MixProject do
   use Mix.Project
 
-  @version "0.6.0"
+  @version "0.7.0"
   @source_url "https://github.com/devaction-labs/swoosh_cloudflare"
 
   def project do
@@ -56,7 +56,13 @@ defmodule SwooshCloudflare.MixProject do
       extras: ["README.md", "CHANGELOG.md"],
       groups_for_modules: [
         Adapter: [Swoosh.Adapters.Cloudflare],
-        API: [SwooshCloudflare, SwooshCloudflare.Suppressions]
+        API: [
+          SwooshCloudflare,
+          SwooshCloudflare.Suppressions,
+          SwooshCloudflare.Subdomains,
+          SwooshCloudflare.Analytics
+        ],
+        Events: [SwooshCloudflare.Event, SwooshCloudflare.Queues]
       ]
     ]
   end
