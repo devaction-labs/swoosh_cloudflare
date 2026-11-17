@@ -168,4 +168,29 @@ defmodule SwooshCloudflare.EmailBuilderTest do
 
     assert att["content"] == Base.encode64("file content from disk")
   end
+
+  test "formats a single reply_to address" do
+    email = %{base_email() | reply_to: {"Support", "support@example.com"}}
+
+    assert EmailBuilder.build(email)["reply_to"] ==
+             %{"address" => "support@example.com", "name" => "Support"}
+  end
+
+  test "formats a list of reply_to addresses" do
+    email = %{
+      base_email()
+      | reply_to: [{"Support", "support@example.com"}, "help@example.com"]
+    }
+
+    assert EmailBuilder.build(email)["reply_to"] == [
+             %{"address" => "support@example.com", "name" => "Support"},
+             "help@example.com"
+           ]
+  end
+
+  test "omits reply_to when it is an empty list" do
+    email = %{base_email() | reply_to: []}
+
+    refute Map.has_key?(EmailBuilder.build(email), "reply_to")
+  end
 end

@@ -7,7 +7,7 @@ defmodule SwooshCloudflare.EmailBuilder do
     |> put_required(email)
     |> put_optional("cc", format_addresses(email.cc))
     |> put_optional("bcc", format_addresses(email.bcc))
-    |> put_optional("reply_to", format_address(email.reply_to))
+    |> put_optional("reply_to", format_reply_to(email.reply_to))
     |> put_optional("headers", email.headers)
     |> put_optional("attachments", build_attachments(email.attachments))
   end
@@ -27,6 +27,9 @@ defmodule SwooshCloudflare.EmailBuilder do
   defp format_addresses(addresses) when is_list(addresses) do
     Enum.map(addresses, &format_address/1)
   end
+
+  defp format_reply_to(addresses) when is_list(addresses), do: format_addresses(addresses)
+  defp format_reply_to(address), do: format_address(address)
 
   defp format_address(nil), do: nil
 
