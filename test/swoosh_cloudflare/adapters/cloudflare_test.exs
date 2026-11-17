@@ -257,13 +257,13 @@ defmodule Swoosh.Adapters.CloudflareTest do
              Cloudflare.deliver(base_email(), config)
   end
 
-  test "returns unknown_error with the text of a non-JSON error", %{
+  test "falls back on status with the text of a non-JSON error", %{
     bypass: bypass,
     config: config
   } do
     respond(bypass, 502, "<html>Bad gateway</html>", "text/html")
 
-    assert {:error, {502, :unknown_error, "<html>Bad gateway</html>"}} =
+    assert {:error, {502, :server_error, "<html>Bad gateway</html>"}} =
              Cloudflare.deliver(base_email(), config)
   end
 
@@ -314,7 +314,7 @@ defmodule Swoosh.Adapters.CloudflareTest do
       |> Plug.Conn.send_resp(200, success_body())
     end)
 
-    results = Cloudflare.deliver_many(emails, config)
+    assert {:ok, results} = Cloudflare.deliver_many(emails, config)
 
     assert length(results) == 2
 
@@ -342,9 +342,41 @@ defmodule Swoosh.Adapters.CloudflareTest do
       )
     end)
 
-    results = Cloudflare.deliver_many(emails, config)
+    assert {:ok, results} = Cloudflare.deliver_many(emails, config)
 
     assert length(results) == 2
     assert Enum.all?(results, &match?({:error, {500, :server_error, _}}, &1))
+  end
+
+  describe "through Swoosh.Mailer" do
+    defmodule TestMailer do
+      use Swoosh.Mailer, otp_app: :swoosh_cloudflare
+    end
+
+    defp mailer_config(config), do: [adapter: Cloudflare] ++ config
+
+    test "deliver/2 returns {:ok, map}", %{bypass: bypass, config: config} do
+      expect_post(bypass, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(200, success_body())
+      end)
+
+      assert {:ok, %{delivered: ["alice@example.com"]}} =
+               TestMailer.deliver(base_email(), mailer_config(config))
+    end
+
+    test "deliver_many/2 returns {:ok, results}", %{bypass: bypass, config: config} do
+      emails = [base_email(), %{base_email() | to: [{"Bob", "bob@example.com"}]}]
+
+      Bypass.expect(bypass, "POST", "/accounts/test-account-id/email/sending/send", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(200, success_body())
+      end)
+
+      assert {:ok, [{:ok, %{delivered: _}}, {:ok, %{delivered: _}}]} =
+               TestMailer.deliver_many(emails, mailer_config(config))
+    end
   end
 end

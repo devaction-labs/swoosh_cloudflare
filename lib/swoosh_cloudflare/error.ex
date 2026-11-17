@@ -4,7 +4,24 @@ defmodule SwooshCloudflare.Error do
   # Codes from https://developers.cloudflare.com/email-service/api/send-emails/rest-api/#error-responses
 
   @spec from_response(non_neg_integer(), term()) :: {non_neg_integer(), atom(), term()}
-  def from_response(status, body), do: {status, map_code(code(body)), body}
+  def from_response(status, body), do: {status, reason(status, code(body)), body}
+
+  defp reason(status, code) do
+    case map_code(code) do
+      :unknown_error -> status_reason(status)
+      known -> known
+    end
+  end
+
+  defp status_reason(401), do: :authentication_error
+  defp status_reason(403), do: :forbidden
+  defp status_reason(404), do: :not_found
+  defp status_reason(429), do: :rate_limited
+
+  defp status_reason(status) when is_integer(status) and status >= 500 and status < 600,
+    do: :server_error
+
+  defp status_reason(_), do: :unknown_error
 
   # Never raises: a body without an `errors` list (HTML from a proxy, a plain string) has no code.
   defp code(%{"errors" => [%{"code" => code} | _]}), do: code

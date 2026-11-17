@@ -7,7 +7,7 @@ defmodule SwooshCloudflare.EmailBuilder do
     |> put_required(email)
     |> put_optional("cc", format_addresses(email.cc))
     |> put_optional("bcc", format_addresses(email.bcc))
-    |> put_optional("reply_to", format_address(email.reply_to))
+    |> put_optional("reply_to", format_reply_to(email.reply_to))
     |> put_optional("headers", email.headers)
     |> put_optional("attachments", build_attachments(email.attachments))
   end
@@ -28,6 +28,9 @@ defmodule SwooshCloudflare.EmailBuilder do
     Enum.map(addresses, &format_address/1)
   end
 
+  defp format_reply_to(addresses) when is_list(addresses), do: format_addresses(addresses)
+  defp format_reply_to(address), do: format_address(address)
+
   defp format_address(nil), do: nil
 
   defp format_address({name, email}) when name not in [nil, ""],
@@ -45,7 +48,7 @@ defmodule SwooshCloudflare.EmailBuilder do
   defp build_attachment(%Swoosh.Attachment{} = att) do
     %{
       "filename" => att.filename,
-      "content" => att |> read_data() |> Base.encode64(),
+      "content" => att |> Swoosh.Attachment.get_content() |> Base.encode64(),
       "type" => att.content_type,
       "disposition" => disposition(att.type)
     }
@@ -56,14 +59,12 @@ defmodule SwooshCloudflare.EmailBuilder do
        when is_binary(cid) and cid != "",
        do: Map.put(map, "content_id", cid)
 
+  defp put_content_id(map, %Swoosh.Attachment{type: :inline, filename: filename})
+       when is_binary(filename) and filename != "",
+       do: Map.put(map, "content_id", filename)
+
   defp put_content_id(map, _att), do: map
 
   defp disposition(:inline), do: "inline"
   defp disposition(_), do: "attachment"
-
-  defp read_data(%Swoosh.Attachment{data: nil, path: path}) when not is_nil(path),
-    do: File.read!(path)
-
-  defp read_data(%Swoosh.Attachment{data: data}),
-    do: data
 end

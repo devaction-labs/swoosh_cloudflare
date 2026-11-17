@@ -45,11 +45,20 @@ CLOUDFLARE_ACCOUNT_ID=your_account_id_here
 
 ## Configuration
 
+Read the secrets at runtime, in `config/runtime.exs`:
+
 ```elixir
 config :my_app, MyApp.Mailer,
   adapter: Swoosh.Adapters.Cloudflare,
-  api_token: System.get_env("CLOUDFLARE_EMAIL_TOKEN"),
-  account_id: System.get_env("CLOUDFLARE_ACCOUNT_ID")
+  api_token: System.fetch_env!("CLOUDFLARE_EMAIL_TOKEN"),
+  account_id: System.fetch_env!("CLOUDFLARE_ACCOUNT_ID")
+```
+
+This adapter uses [Req](https://hex.pm/packages/req) directly, so Swoosh's default
+Hackney API client is not needed. Disable it in `config/config.exs`:
+
+```elixir
+config :swoosh, :api_client, false
 ```
 
 Define your mailer module:
@@ -177,6 +186,8 @@ Full error table ([Cloudflare docs](https://developers.cloudflare.com/email-serv
 | `:rate_limited` | 429 | 10004 |
 | `:server_error` | 500/503 | 10002, 10003, 10100 |
 | `:unknown_error` | any | — |
+
+When the response body has no usable Cloudflare error code (for example a non-JSON body from a proxy, or an unknown code), the reason falls back on the HTTP status: 401 `:authentication_error`, 403 `:forbidden`, 404 `:not_found`, 429 `:rate_limited`, 5xx `:server_error`, anything else `:unknown_error`. A known Cloudflare code always takes precedence over the status.
 
 If you receive `:authentication_error`, verify that:
 - The API token has the **Email Sending — Send** permission
