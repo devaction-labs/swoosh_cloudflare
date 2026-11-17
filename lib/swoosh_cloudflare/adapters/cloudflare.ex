@@ -17,6 +17,11 @@ defmodule Swoosh.Adapters.Cloudflare do
   - `suppressed_recipients` lists recipients dropped because they are on the suppression list
     (only when "Drop suppressed recipients" is enabled on the sending domain). It is `[]` otherwise.
 
+  ## Sending many emails
+
+  `deliver_many/2` returns `{:ok, results}`, where `results` is a list with one
+  `{:ok, map} | {:error, term}` per email, in input order.
+
   ## Inline images
 
   Use `type: :inline` with a `cid`, e.g.
@@ -55,13 +60,17 @@ defmodule Swoosh.Adapters.Cloudflare do
   end
 
   @impl true
-  @spec deliver_many([Swoosh.Email.t()], keyword()) :: [{:ok, map()} | {:error, term()}]
+  @spec deliver_many([Swoosh.Email.t()], keyword()) ::
+          {:ok, [{:ok, map()} | {:error, term()}]} | {:error, term()}
   def deliver_many(emails, config) do
-    emails
-    |> Task.async_stream(&deliver(&1, config), timeout: 30_000, on_timeout: :kill_task)
-    |> Enum.map(fn
-      {:ok, result} -> result
-      {:exit, _} -> {:error, :timeout}
-    end)
+    results =
+      emails
+      |> Task.async_stream(&deliver(&1, config), timeout: 30_000, on_timeout: :kill_task)
+      |> Enum.map(fn
+        {:ok, result} -> result
+        {:exit, _} -> {:error, :timeout}
+      end)
+
+    {:ok, results}
   end
 end
