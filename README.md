@@ -94,6 +94,10 @@ new()
 |> MyApp.Mailer.deliver()
 ```
 
+### Sending many emails
+
+`MyApp.Mailer.deliver_many/1` sends concurrently and returns `{:ok, results}` with one result per email, in input order. Set `:max_concurrency` in the mailer config (default `System.schedulers_online()`) to limit parallelism. Each task times out after the effective `receive_timeout` (from `:req_options`, default 15 000 ms) plus 5 000 ms, giving `{:error, :timeout}`. A timeout result is ambiguous: the email may have been sent.
+
 ### Provider options
 
 Values set with `Swoosh.Email.put_provider_option/3` are merged into the JSON payload (keys converted to strings) and override built fields. Use this as an escape hatch for API fields the adapter does not map yet:

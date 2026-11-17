@@ -49,6 +49,12 @@ defmodule Swoosh.Adapters.Cloudflare do
   `deliver_many/2` returns `{:ok, results}`, where `results` is a list with one
   `{:ok, map} | {:error, term}` per email, in input order.
 
+  Emails are sent concurrently, up to `:max_concurrency` at a time (config key,
+  default `System.schedulers_online()`). Each task is given the effective
+  `receive_timeout` (from `:req_options`, default 15_000 ms) plus 5_000 ms; a task
+  that exceeds it is killed and its result is `{:error, :timeout}`. A timeout result
+  is ambiguous: the email may have been sent anyway.
+
   ## Inline images
 
   Use `type: :inline` with a `cid`, e.g.
@@ -113,12 +119,24 @@ defmodule Swoosh.Adapters.Cloudflare do
   def deliver_many(emails, config) do
     results =
       emails
-      |> Task.async_stream(&deliver(&1, config), timeout: 30_000, on_timeout: :kill_task)
+      |> Task.async_stream(&deliver(&1, config),
+        max_concurrency: Keyword.get(config, :max_concurrency, System.schedulers_online()),
+        timeout: task_timeout(config),
+        on_timeout: :kill_task
+      )
       |> Enum.map(fn
         {:ok, result} -> result
         {:exit, _} -> {:error, :timeout}
       end)
 
     {:ok, results}
+  end
+
+  # Effective receive_timeout (from :req_options, default 15_000) plus a margin.
+  defp task_timeout(config) do
+    receive_timeout =
+      config |> Keyword.get(:req_options, []) |> Keyword.get(:receive_timeout, 15_000)
+
+    receive_timeout + 5_000
   end
 end
