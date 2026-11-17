@@ -32,22 +32,47 @@ defmodule SwooshCloudflare.Client do
   # `req_opts` may carry `:json` and `:params`.
   @spec request(atom(), String.t(), keyword(), keyword()) :: {:ok, map()} | {:error, term()}
   def request(method, path, config, req_opts \\ []) do
-    for key <- [:api_token, :account_id], is_nil(config[key]) do
+    check_config!(config, [:api_token, :account_id])
+    url_path = "/accounts/#{config[:account_id]}/email/sending#{path}"
+    perform(method, url_path, path, config, req_opts)
+  end
+
+  # Performs a request against `{base}{path}`, for any path under the API base URL
+  # (for example `/accounts/{id}/queues/...`, `/zones/{id}/...` or `/graphql`).
+  # `path` is also the `:path` reported in telemetry. `:api_token` is always required;
+  # `:account_id` only for paths under `/accounts/`.
+  @spec call(atom(), String.t(), keyword(), keyword()) :: {:ok, map()} | {:error, term()}
+  def call(method, path, config, req_opts \\ []) do
+    required =
+      if String.starts_with?(path, "/accounts/"),
+        do: [:api_token, :account_id],
+        else: [:api_token]
+
+    check_config!(config, required)
+    perform(method, path, path, config, req_opts)
+  end
+
+  defp check_config!(config, keys) do
+    for key <- keys, is_nil(config[key]) do
       raise ArgumentError, "expected #{inspect(key)} to be set in the config"
     end
 
+    :ok
+  end
+
+  defp perform(method, url_path, telemetry_path, config, req_opts) do
     base = Keyword.get(config, :base_url, @base_url)
-    url = "#{base}/accounts/#{config[:account_id]}/email/sending#{path}"
+    url = base <> url_path
 
     req_opts = config |> build_req_opts(method, url, req_opts) |> encode_json()
 
-    :telemetry.span([:swoosh_cloudflare, :request], %{method: method, path: path}, fn ->
+    :telemetry.span([:swoosh_cloudflare, :request], %{method: method, path: telemetry_path}, fn ->
       {result, status} = do_request(req_opts)
 
       {result,
        %{
          method: method,
-         path: path,
+         path: telemetry_path,
          status: status,
          result: if(match?({:ok, _}, result), do: :ok, else: :error)
        }}
