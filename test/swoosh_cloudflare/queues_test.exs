@@ -107,6 +107,21 @@ defmodule SwooshCloudflare.QueuesTest do
       assert msg.event == nil
     end
 
+    test "leaves event nil for envelopes outside Email Sending", %{bypass: bypass, config: config} do
+      body = ~s({"type":"order.created","payload":{}})
+      msg = pull_one(bypass, config, message(body, "json"))
+
+      assert msg.body == %{"type" => "order.created", "payload" => %{}}
+      assert msg.event == nil
+    end
+
+    test "keeps unknown future Email Sending event types", %{bypass: bypass, config: config} do
+      body = ~s({"type":"cf.email.sending.message.opened","payload":{}})
+      msg = pull_one(bypass, config, message(body, "json"))
+
+      assert %Event{type: :unknown, raw_type: "cf.email.sending.message.opened"} = msg.event
+    end
+
     test "bytes bodies are base64-decoded, text bodies are left alone", %{
       bypass: bypass,
       config: config

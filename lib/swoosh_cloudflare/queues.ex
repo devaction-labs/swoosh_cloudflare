@@ -161,8 +161,8 @@ defmodule SwooshCloudflare.Queues do
 
     event =
       case Event.parse(body) do
-        {:ok, event} -> event
-        {:error, _} -> nil
+        {:ok, %Event{raw_type: "cf.email.sending." <> _} = event} -> event
+        _ -> nil
       end
 
     %{
