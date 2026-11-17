@@ -240,12 +240,21 @@ alias SwooshCloudflare.Queues
 
 {:ok, messages} = Queues.pull(queue_id, config, batch_size: 50, visibility_timeout_ms: 30_000)
 
-for %{event: %SwooshCloudflare.Event{type: :bounced} = event} <- messages do
-  MyApp.Mailing.mark_bounced(event.recipient, event.bounce)
-end
+{done, failed} =
+  Enum.split_with(messages, fn message ->
+    case message.event do
+      %SwooshCloudflare.Event{type: :bounced} = event ->
+        MyApp.Mailing.mark_bounced(event.recipient, event.bounce) == :ok
 
-# Acknowledge what you processed; mark the rest for retry, optionally delayed
-Queues.ack(queue_id, [done.lease_id], config, retries: [{failed.lease_id, 60}])
+      _ ->
+        true
+    end
+  end)
+
+# Acknowledge what you processed; retry the rest after 60 seconds
+Queues.ack(queue_id, Enum.map(done, & &1.lease_id), config,
+  retries: Enum.map(failed, &{&1.lease_id, 60})
+)
 ```
 
 Each message is `%{id, lease_id, attempts, timestamp_ms, body, event}`. `event` is a `SwooshCloudflare.Event` (or `nil` when the body is not an Email Sending event). `SwooshCloudflare.Event.parse/1` also accepts a decoded map or JSON string if you receive the events some other way. Queues uses short polling, so sleep between empty pulls; the library ships no consumer process, run the loop under your own supervised process (see `SwooshCloudflare.Queues` for a minimal example).
