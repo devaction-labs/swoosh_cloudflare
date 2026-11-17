@@ -14,19 +14,6 @@ defmodule SwooshCloudflare do
   alias SwooshCloudflare.Client
 
   @doc """
-  Hello world.
-
-  ## Examples
-
-      iex> SwooshCloudflare.hello()
-      :world
-
-  """
-  def hello do
-    :world
-  end
-
-  @doc """
   Sends a full RFC 5322 MIME message through the `send_raw` endpoint.
 
   `from` is the envelope sender and `recipients` the envelope recipients.
